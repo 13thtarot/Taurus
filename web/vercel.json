@@ -1,9 +1,9 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/customer-ui-enhanced.html" },
-    { "source": "/staff", "destination": "/staff-ui-enhanced.html" },
-    { "source": "/owner", "destination": "/owner-ui-enhanced.html" }
+    { "source": "/", "destination": "/customer-ui-enhanced" },
+    { "source": "/staff", "destination": "/staff-ui-enhanced" },
+    { "source": "/owner", "destination": "/owner-ui-enhanced" }
   ],
   "headers": [
     { "source": "/img/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
