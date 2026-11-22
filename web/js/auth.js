@@ -5,7 +5,14 @@ export async function signUp({ email, password, username, phone, fullName = "" }
     email, password,
     options: { data: { username, phone, full_name: fullName } },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const m = (error.message || "").toLowerCase();
+    if (m.includes("already registered") || m.includes("already exists")) throw new Error("An account with this email already exists. Log in instead.");
+    if (m.includes("rate limit") || m.includes("too many")) throw new Error("Too many attempts. Please wait a few minutes and try again.");
+    if (m.includes("password")) throw new Error("Please choose a stronger password.");
+    if (m.includes("email")) throw new Error("Please enter a valid email address.");
+    throw new Error("We couldn't create your account right now. Please try again.");
+  }
   return data;            // { user, session } (session is null when email confirmation is required)
 }
 
@@ -20,9 +27,10 @@ export async function signIn(identifier, password) {
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     const m = (error.message || "").toLowerCase();
-    if (m.includes("not confirmed")) throw new Error("This email is not confirmed yet. In Supabase, turn off Confirm email (Authentication > Providers > Email) or tick Auto Confirm User, then try again.");
-    if (m.includes("invalid login")) throw new Error("Wrong email/username or password. (If you created this account in the Supabase dashboard, log in with the email, not a username.)");
-    throw new Error(error.message);
+    if (m.includes("not confirmed")) throw new Error("Please confirm your email first. Check your inbox for the confirmation link, then log in.");
+    if (m.includes("invalid login")) throw new Error("Incorrect email, username or password. Please try again.");
+    if (m.includes("rate limit") || m.includes("too many")) throw new Error("Too many attempts. Please wait a few minutes and try again.");
+    throw new Error("We couldn't log you in right now. Please try again.");
   }
   return data.user;
 }

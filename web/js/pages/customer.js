@@ -446,7 +446,7 @@ ${fams.map(([name, test, blurb]) => {
       };
       const about = () =>
         W(
-          `<h2>About us</h2><div class="card"><p>A cozy salon in Quezon City with 7 stations and 8 technicians.</p><p class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}. Lunch break ${m2t(DB.hours.ls)} to ${m2t(DB.hours.le)}. Placeholder contact: @fairytalenails</p></div>`,
+          `<h2>About us</h2><div class="card"><p>A cozy salon in Quezon City with 7 stations and 8 technicians.</p><p class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}. Lunch break ${m2t(DB.hours.ls)} to ${m2t(DB.hours.le)}. Follow us on Instagram: @fairytalenails</p></div>`,
         );
       const signup = () =>
         W(
@@ -789,7 +789,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         }
         // Re-read from the database so what you see is exactly what was stored (and what you'll see after a refresh).
         try { setU(await FN.myProfile()); } catch (e) { /* keep local copy */ }
-        if (done.includes("phone") && U.phone !== r.next.phone) failed.push(["Mobile number", "The database did not keep the new number. Please try again."]);
+        if (done.includes("phone") && U.phone !== r.next.phone) failed.push(["Mobile number", "We couldn't save your new number. Please try again."]);
         render();
         if (failed.length) {
           err(failed.map(([w, m]) => w + ": " + m).join(" "));
@@ -926,7 +926,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (!u || !w) return err("Enter your email (or username) and password.");
         try {
           await FN.signIn(u, w);
-          if (!(await startSession())) return err("That is a staff or owner account. Please use staff.html or owner.html.");
+          if (!(await startSession())) return err("This account is for salon staff. Please sign in through the staff page.");
           go(B.sel && B.sel.length ? "book" : "mine"); // came from "Book" on the price list: continue that booking
         } catch (e) { err(e.message); }
       }
