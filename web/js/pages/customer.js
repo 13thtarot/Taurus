@@ -262,7 +262,8 @@
       }
       const te = (id) => (TE.find((x) => x.id === id) || { n: "Unassigned" }).n,
         LB = {
-          pending: "Awaiting deposit",
+          pending: "Awaiting payment",
+          verifying: "Waiting for confirmation",
           expired: "Expired",
           confirmed: "Confirmed",
           waiting: "Waiting",
@@ -534,10 +535,11 @@ ${fams.map(([name, test, blurb]) => {
       }
       function book() {
         if (!U) return gate();
+        if (PAY) return payView();
         if (B.done) {
           const a = B.done;
           return W(
-            `<h2>${a.status === "confirmed" ? "Booking confirmed" : "Booking received"}</h2><div class="card"><p>Confirmation number <b>${a.code}</b></p><p>${a.svc}<br>${a.staff ? "with " + esc(te(a.staff)) + " · " : ""}${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}<br>Estimated ${a.estP}</p><p><b>Status: ${a.status === "confirmed" ? "Confirmed" : "Awaiting deposit"}.</b> ${a.status === "confirmed" ? "Your ₱" + DB.deposit + " deposit was recorded and your time slot is reserved." : "Your time slot is held for a few minutes. Open My Appointments to pay the deposit."}</p><small>${DB.test ? "Test mode: no real payment was made." : ""}</small></div><p><button class="btn" onclick="B={step:0};go(U?'mine':'home')">${U ? "View my appointments" : "Done"}</button></p>`,
+            `<h2>${a.status === "confirmed" ? "Booking confirmed" : "Booking received"}</h2><div class="card"><p>Confirmation number <b>${a.code}</b></p><p>${a.svc}<br>${a.staff ? "with " + esc(te(a.staff)) + " · " : ""}${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}<br>Estimated ${a.estP}</p><p><b>Status: ${a.status === "confirmed" ? "Confirmed" : "Awaiting deposit"}.</b> ${a.status === "confirmed" ? "Your ₱" + DB.deposit + " deposit was recorded and your time slot is reserved." : "Your time slot is held for a few minutes. Open My Appointments to pay the deposit."}</p></div><p><button class="btn" onclick="B={step:0};go(U?'mine':'home')">${U ? "View my appointments" : "Done"}</button></p>`,
           );
         }
         const o = bord(),
@@ -614,9 +616,11 @@ ${fams.map(([name, test, blurb]) => {
             ed = B.editC, sN = ed || !NAME_RE.test((n || "").trim()), sP = ed || !PH_RE.test(p || ""), sE = ed || !EMAIL_RE.test(e || ""), known = !sN && !sP && !sE;
           h = `<h3>Review and your details</h3><small>Check the summary${known ? "." : ", then fill in the missing details."}</small>${known ? `<div class="card" style="margin:.8rem 0"><div class="row"><span><b>Booking for ${esc(n)}</b><br><small>${esc(fmtPhone(p))} · ${esc(e)}</small></span><a class="pr" style="cursor:pointer" onclick="B.editC=1;render()">Change</a></div></div>` : ""}${sN && !ed && !(n || "").trim() ? `<div class="msg ok">We don't have your name on file yet. Enter it once and we will remember it for your next bookings.</div>` : ""}${!ed && p && !PH_RE.test(p) ? `<div class="msg">Your saved mobile number "${esc(p)}" is not a complete 11-digit number. Please enter it again.</div>` : ""}${sN ? fld("b_n", "Name", "text", n) : ""}${sP ? phoneFld("b_p", "Mobile number", PH_RE.test(p || "") ? p : (p || "").replace(/\D/g, "").slice(0, 11)) : ""}${sE ? fld("b_e", "Email", "email", e) : ""}${fld("b_t", "Notes (optional)", "text", B.notes || "")}${B.err ? `<div class="msg">${B.err}</div>` : ""}`;
         }
-        if (k === "confirm")
-          h = `<h3>Pay the ₱${DB.deposit} reservation</h3><div class="card"><p>Your slot is reserved for you while you pay the reservation deposit, which is deducted from your final bill.</p>${DB.test ? '<div class="msg ok">Test mode: confirming records the deposit instantly. No real payment is made.</div>' : '<div class="msg ok">You will be taken to PayMongo\'s secure checkout (GCash, Maya or card). Your booking is confirmed automatically once the payment goes through.</div>'}</div>${B.err ? `<div class="msg">${B.err}</div>` : ""}<p class="mute">The deposit may be forfeited if you cancel.</p>`;
-        const nav = `<p style="display:flex;gap:.6rem">${B.step ? '<button class="btn w" onclick="B.step--;render()">Back</button>' : ""}${!cont ? "" : k === "review" ? '<button class="btn" onclick="det()">Continue</button>' : k === "confirm" ? `<button class="btn" ${B.busy ? "disabled" : ""} onclick="askSubmit()">${B.busy ? "Please wait..." : DB.test ? "Confirm booking" : "Confirm & pay deposit"}</button>` : `<button class="btn" ${ok ? "" : 'disabled style="opacity:.4"'} onclick="B.step++;render()">Continue</button>`}</p>`;
+        if (k === "confirm") {
+          const lo = sm("p"), hi = sm("p", "px"), dn = lo > DB.deposit, opt = dn ? B.opt || "down" : (B.opt = "full");
+          h = `<h3>How much would you like to pay now?</h3><small>You pay by GCash or Maya on the next screen.</small><div class="sg" style="margin-top:.6rem">${dn ? payOpt("down", opt, "Down payment", "Reserve your slot now and pay the rest at the salon.", DB.deposit, "B.opt") : ""}${payOpt("full", opt, "Full payment", lo === hi ? "Pay the whole estimated amount now." : "Pay the starting price now. Any difference is settled at the salon.", Math.max(lo, DB.deposit), "B.opt")}</div><div class="card" style="margin-top:.8rem"><p style="margin:0">After you confirm, we hold your slot for <b>${DB.hold} minutes</b> while you send the payment and upload a screenshot of your receipt. Your booking is confirmed once the salon has checked your payment.</p></div>${B.err ? `<div class="msg">${B.err}</div>` : ""}<p class="mute">The down payment is deducted from your final bill and may be forfeited if you cancel.</p>`;
+        }
+        const nav = `<p style="display:flex;gap:.6rem">${B.step ? '<button class="btn w" onclick="B.step--;render()">Back</button>' : ""}${!cont ? "" : k === "review" ? '<button class="btn" onclick="det()">Continue</button>' : k === "confirm" ? `<button class="btn" ${B.busy ? "disabled" : ""} onclick="askSubmit()">${B.busy ? "Please wait..." : "Confirm & continue to payment"}</button>` : `<button class="btn" ${ok ? "" : 'disabled style="opacity:.4"'} onclick="B.step++;render()">Continue</button>`}</p>`;
         return `<section class="sec"><div class="wrap" style="max-width:980px"><h2>Book an appointment</h2>${prog}<div class="bk"><div>${h}${nav}</div>${bsum()}</div></div></section>`;
       }
       function det() {
@@ -654,9 +658,10 @@ ${fams.map(([name, test, blurb]) => {
       }
       function askSubmit() {
         if (B.busy) return;
-        ask(DB.test ? "Reserve this appointment?" : "Continue to payment?",
-          `<p>${sel().map((s) => esc(s.n)).join(", ")}<br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p><label class="agree"><input type="checkbox" id="agree" onchange="$('#dlg_yes').disabled=!this.checked"> I understand the ₱${DB.deposit} reservation deposit is deducted from my final bill and may be forfeited if I cancel.</label>`,
-          DB.test ? "Confirm & reserve" : "Go to secure payment", "modal();submitB()", "Not yet");
+        const amt = (B.opt || "down") === "full" ? Math.max(sm("p"), DB.deposit) : DB.deposit;
+        ask("Reserve this appointment?",
+          `<p>${sel().map((s) => esc(s.n)).join(", ")}<br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p><label class="agree"><input type="checkbox" id="agree" onchange="$('#dlg_yes').disabled=!this.checked"> I will send ${php(amt)} and upload the receipt within ${DB.hold} minutes. I understand the down payment may be forfeited if I cancel.</label>`,
+          "Reserve my slot", "modal();submitB()", "Not yet");
         $("#dlg_yes").disabled = true;
       }
       /* ---------- My Appointments: tabs + sort by date/time (or service, price, status) ---------- */
@@ -678,17 +683,17 @@ ${fams.map(([name, test, blurb]) => {
         if (!U) return gate();
         const L = DB.appts.filter((a) => a.uid === U.id),
           T = {
-            Upcoming: L.filter((a) => ["pending", "confirmed", "waiting", "service"].includes(a.status)),
+            Upcoming: L.filter((a) => ["pending", "verifying", "confirmed", "waiting", "service"].includes(a.status)),
             Completed: L.filter((a) => a.status === "completed"),
             Cancelled: L.filter((a) => ["cancelled", "noshow", "expired", "refunded", "voided"].includes(a.status)),
           },
           sk = sortKey(),
           list = [...T[MT]].sort(SORTS[sk][1]);
-        const nx = DB.appts.filter((a) => a.uid === U.id && ["pending", "confirmed", "waiting"].includes(a.status) && a.date >= today()).sort((x, y) => key(x).localeCompare(key(y)))[0];
+        const nx = DB.appts.filter((a) => a.uid === U.id && ["pending", "verifying", "confirmed", "waiting"].includes(a.status) && a.date >= today()).sort((x, y) => key(x).localeCompare(key(y)))[0];
         return W(
           `<h2>Hello, ${esc(U.name || U.user)}</h2><div class="card next"><small>Next appointment</small>${nx ? `<h3 style="margin:.3rem 0">${esc(nx.svc)}</h3><p style="margin:0">${bfl(nx.date)} at ${m2t(nx.start)} ${pill(nx.status)}<br><small>Confirmation ${esc(nx.code)}</small></p>` : '<p class="mute" style="margin:.3rem 0 0">You have no upcoming appointments.</p>'}</div><h2 style="margin-top:1.4rem">My Appointments</h2><div class="tabs">${Object.keys(T).map((t) => `<button class="${MT === t ? "on" : ""}" onclick="MT='${t}';MS='';render()">${t} (${T[t].length})</button>`).join("")}</div>
 <div class="sortbar"><label for="msort">Sort by</label><select id="msort" onchange="MS=this.value;render()">${Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}" ${k === sk ? "selected" : ""}>${l}</option>`).join("")}</select><small>${list.length} appointment${list.length === 1 ? "" : "s"}</small></div>
-${list.map((a) => `<div class="card appt">${dateBox(a)}<div class="appt-b"><div class="row"><b>${esc(a.svc)}</b>${pill(a.status)}</div><small>🕒 ${m2t(a.start)} to ${m2t(a.start + a.dur)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small><br><small>${a.estP || php(a.price)} · Confirmation <b>${esc(a.code)}</b></small>${MT === "Upcoming" && a.status !== "service" ? `<p style="margin:.5rem 0 0">${a.status === "pending" ? `<button class="btn sm" onclick="payHold('${a.id}')">Pay ₱${DB.deposit} deposit</button> ` : ""}<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button></p>${a.status === "pending" ? `<small>Your time slot is held for a short time until the deposit is paid.</small>` : ""}` : ""}</div></div>`).join("") || '<p class="mute">Nothing here yet.</p>'}`,
+${list.map((a) => `<div class="card appt">${dateBox(a)}<div class="appt-b"><div class="row"><b>${esc(a.svc)}</b>${pill(a.status)}</div><small>🕒 ${m2t(a.start)} to ${m2t(a.start + a.dur)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small><br><small>${a.estP || php(a.price)} · Confirmation <b>${esc(a.code)}</b></small>${MT === "Upcoming" && a.status !== "service" ? `<p style="margin:.5rem 0 0">${a.status === "pending" ? `<button class="btn sm" onclick="payHold('${a.id}')">Pay &amp; upload receipt</button> ` : ""}${a.status === "verifying" ? "" : `<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`}</p>${a.status === "pending" ? `<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>` : a.status === "verifying" ? `<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>` : ""}` : ""}</div></div>`).join("") || '<p class="mute">Nothing here yet.</p>'}`,
           720,
         );
       }
@@ -863,7 +868,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           svc: it.map((i) => i.name).join(", "),
           date: `${p.year}-${p.month}-${p.day}`, start: +p.hour * 60 + +p.minute, dur,
           price: lo, estP: sale && sale.status === "paid" ? php(sale.total) : lo === hi ? php(lo) : php(lo) + " to " + php(hi),
-          estD: durT(dur), status: r.status === "held" ? "pending" : r.status, staff: r.technician_id || 0, hist: [],
+          estD: durT(dur), status: r.status === "held" ? (r.hold_expires_at ? "pending" : "verifying") : r.status, exp: r.hold_expires_at, staff: r.technician_id || 0, hist: [],
         };
       }
       async function loadAppts(quiet) {
@@ -906,7 +911,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           Object.keys(GN).forEach((k) => delete GN[k]);
           Object.assign(GN, c.GN);
           DB.SV = c.SV; TE.splice(0, TE.length, ...c.TE);
-          DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode;
+          DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode; DB.hold = c.holdMinutes || 5; DB.pay = c.pay || {};
           tab = GR[0];
           if (await api.currentUser()) { await startSession(); await resumePayment(); }
         } catch (e) {
@@ -985,23 +990,77 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           const a = await FN.createHold({ serviceIds: [...B.sel], date: B.date, startMin: B.slot, techId: B.tech || 0, method: B.method, name: B.name, phone: B.phone, email: B.email, notes: B.notes });
           if (B.refFile) { try { await FN.uploadReference(B.refFile, a.id); } catch (x) { console.warn("reference upload failed", x); } }
           FN.resetAttempt(); clearSlots();
-          if (!DB.test) { await startLivePayment(a.id); return; }
-          await FN.payDepositTest(a.id);
           await loadAppts();
-          B = { step: 0, done: DB.appts.find((x) => x.id === a.id) };
+          const opt = B.opt || "down";
+          B = { step: 0 };
+          return openPay(a.id, opt);
         } catch (e) {
           B.busy = false;
           if (/SLOT_UNAVAILABLE|HOLD_EXPIRED/.test(e.code || e.message)) {
             clearSlots(); FN.resetAttempt(); B.warn = e.message; B.slot = null; B.step = bidx("time");
-          } else B.err = (e.message || "Something went wrong. Please try again.") + (DB.test ? "" : " If your slot was reserved, you can pay the deposit from My Appointments.");
+          } else B.err = (e.message || "Something went wrong. Please try again.") + " If your slot was reserved, you can finish paying from My Appointments.";
         }
         render();
       }
-      async function payHold(id) {
+      function payHold(id) { openPay(id, "down"); }
+      /* ---------- pay & upload receipt: GCash / Maya outside the site, staff verify the screenshot ---------- */
+      let PAY = null; // { id, opt, exp, file, err, busy, sent, expired }
+      const payOpt = (v, cur, t, d, amt, target) =>
+        `<button class="opt ${cur === v ? "on" : ""}" onclick="${target}='${v}';render()"><span><b>${t}</b><br><small>${d}</small></span><b class="pr">${php(amt)}</b></button>`;
+      function openPay(id, opt) {
+        const a = DB.appts.find((x) => x.id === id);
+        PAY = { id, opt: opt || "down", exp: a && a.exp, file: null, err: "" };
+        P = "book"; render(); scrollTo(0, 0);
+      }
+      const payAmt = (a) => (PAY.opt === "full" ? Math.max(a.price, DB.deposit) : DB.deposit);
+      function payView() {
+        const a = DB.appts.find((x) => x.id === PAY.id), done = () => "PAY=null;B={step:0};go('mine')";
+        if (PAY.sent || (a && a.status === "verifying"))
+          return W(`<h2>Receipt sent</h2><div class="card"><p>Thank you! We received your payment receipt for booking <b>${esc(a ? a.code : "")}</b>.</p>${a ? `<p>${esc(a.svc)}<br>${bfl(a.date)} at ${m2t(a.start)}</p>` : ""}<p><b>Status: Waiting for confirmation.</b> The salon will check your payment and confirm your booking. You can follow it in My Appointments.</p></div><p><button class="btn" onclick="${done()}">View my appointments</button></p>`);
+        if (!a || PAY.expired || a.status !== "pending")
+          return W(`<h2>Your reserved time ran out</h2><div class="card"><p>We did not receive a receipt within ${DB.hold} minutes, so the time slot was released. Please book again. If you already sent money, contact the salon with your receipt.</p></div><p><button class="btn" onclick="PAY=null;B={step:0};go('book')">Book again</button> <button class="btn w" onclick="${done()}">My appointments</button></p>`);
+        if (a.price <= DB.deposit) PAY.opt = "full";
+        const pay = DB.pay || {}, amt = payAmt(a),
+          acct = (n, nm, num) => num ? `<div class="payacct"><b>${n}</b><br><small>${esc(nm)}</small><br><span class="paynum">${esc(num)}</span> <button class="btn sm w" type="button" onclick="copyNum('${esc(num)}',this)">Copy</button></div>` : "",
+          details = acct("GCash", pay.gcashName, pay.gcashNumber) + acct("Maya", pay.mayaName, pay.mayaNumber),
+          methods = [["gcash", "GCash"], ["maya", "Maya"]].filter(([k]) => !(pay.gcashNumber || pay.mayaNumber) || pay[k + "Number"]);
+        return W(`<h2>Pay &amp; upload your receipt</h2>
+<div class="card"><div class="row"><span>Booking <b>${esc(a.code)}</b><br><small>${esc(a.svc)} · ${bfl(a.date)} at ${m2t(a.start)}</small></span><span class="paytimer" aria-live="polite">Time left <b id="paycd">${cdText()}</b></span></div></div>
+<h3 class="payh">1. Amount to pay</h3><div class="sg">${a.price <= DB.deposit ? "" : payOpt("down", PAY.opt, "Down payment", "Pay the rest at the salon.", DB.deposit, "PAY.opt")}${payOpt("full", PAY.opt, "Full payment", "Pay the estimated total now.", Math.max(a.price, DB.deposit), "PAY.opt")}</div>
+<h3 class="payh">2. Send ${php(amt)}</h3><div class="card payto">${pay.qrUrl ? `<img class="payqr" src="${esc(pay.qrUrl)}" alt="Salon payment QR code">` : ""}<div>${details || '<p class="mute" style="margin:0">Send the payment to the salon\'s GCash or Maya account.</p>'}${pay.note ? `<p class="mute" style="margin:.6rem 0 0">${esc(pay.note)}</p>` : ""}<p class="mute" style="margin:.6rem 0 0">Please put your booking number <b>${esc(a.code)}</b> in the message, if your app allows it.</p></div></div>
+<h3 class="payh">3. Upload your receipt</h3><div class="card"><label for="pm">Paid with</label><select id="pm" onchange="PAY.method=this.value">${methods.map(([k, l]) => `<option value="${k}" ${(PAY.method || methods[0][0]) === k ? "selected" : ""}>${l}</option>`).join("")}</select><label for="pf">Screenshot or photo of your receipt</label><input id="pf" type="file" accept="image/jpeg,image/png,image/webp,image/heic" onchange="PAY.file=this.files[0]||null;PAY.err='';render()"><small class="fhint">${PAY.file ? "Selected: " + esc(PAY.file.name) : "Make sure the amount and reference number are clearly visible."}</small>${PAY.err ? `<div class="msg">${esc(PAY.err)}</div>` : ""}<p style="margin-bottom:0"><button class="btn" ${PAY.busy ? "disabled" : ""} onclick="sendReceipt()">${PAY.busy ? "Sending..." : "Send receipt"}</button> <button class="btn w" onclick="${done()}">Pay later</button></p></div>`, 720);
+      }
+      function cdText() {
+        const left = PAY && PAY.exp ? new Date(PAY.exp) - Date.now() : 0;
+        if (left <= 0) return "0:00";
+        const t = Math.ceil(left / 1000);
+        return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
+      }
+      setInterval(() => {
+        if (!PAY || PAY.sent || PAY.expired || PAY.busy || !PAY.exp) return;
+        const el = document.getElementById("paycd");
+        if (el) el.textContent = cdText();
+        if (new Date(PAY.exp) - Date.now() <= 0) { PAY.expired = true; if (P === "book") render(); }
+      }, 1000);
+      function copyNum(n, b) {
+        const ok = () => { b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1500); };
+        navigator.clipboard ? navigator.clipboard.writeText(n).then(ok, () => {}) : ok();
+      }
+      async function sendReceipt() {
+        if (!PAY || PAY.busy) return;
+        if (!PAY.file) { PAY.err = "Choose a screenshot or photo of your receipt first."; return render(); }
+        const el = $("#pm"), method = (el && el.value) || "gcash";
+        PAY.busy = true; PAY.err = ""; render();
         try {
-          if (!DB.test) return await startLivePayment(id);
-          await FN.payDepositTest(id); await loadAppts(); render();
-        } catch (e) { modal(`<h3>Could not pay the deposit</h3><p>${esc(e.message)}</p>${MF('<button class="btn w" onclick="modal()">Close</button>')}`); await loadAppts(); }
+          await FN.submitReceipt(PAY.id, PAY.file, PAY.opt, method);
+          PAY.sent = true;
+          await loadAppts(true);
+        } catch (e) {
+          const m = e.message || "";
+          if (/HOLD_EXPIRED/.test(m)) PAY.expired = true;
+          else PAY.err = /NOT_FOUND|INVALID/.test(m) ? "Something went wrong. Please try again." : m;
+        }
+        PAY.busy = false; render();
       }
       const askCancel = (id) =>
         modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="cancelBk('${id}')">Yes, cancel</button>`)}`);

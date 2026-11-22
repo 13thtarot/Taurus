@@ -30,6 +30,12 @@ export async function loadCatalog() {
     taxRate: +settings.tax_rate,
     holdMinutes: settings.hold_minutes,
     testMode: !!settings.test_mode,
+    pay: {
+      gcashName: settings.pay_gcash_name || "", gcashNumber: settings.pay_gcash_number || "",
+      mayaName: settings.pay_maya_name || "", mayaNumber: settings.pay_maya_number || "",
+      note: settings.pay_note || "", qrPath: settings.pay_qr_path || "",
+      qrUrl: settings.pay_qr_path ? sb.storage.from("salon-gallery").getPublicUrl(settings.pay_qr_path).data.publicUrl : "",
+    },
   };
 }
 

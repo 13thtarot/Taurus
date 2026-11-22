@@ -77,7 +77,12 @@
     updateService: "Saving service…",
     deleteService: "Removing service…",
     saveServiceImage: "Uploading picture…",
-    clearServiceImage: "Removing picture…"
+    clearServiceImage: "Removing picture…",
+    submitReceipt: "Sending your receipt…",
+    receiptUrl: "Opening receipt…",
+    pendingReceipts: "Loading payments to check…",
+    reviewPayment: "Saving your decision…",
+    savePaymentQr: "Uploading QR code…"
   };
   // Calls that end in a full-page redirect: keep the screen up instead of flashing the old page.
   var STICKY = { payDeposit: 1, payBalanceOnline: 1 };

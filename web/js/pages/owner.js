@@ -148,12 +148,14 @@
         staff: [
           ["dash", "Dashboard"],
           ["appts", "Appointments & Queue"],
+          ["pay", "Payment checks"],
           ["cust", "Customer Records"],
           ["bill", "Billing & Payment"],
         ],
         owner: [
           ["dash", "Dashboard"],
           ["appts", "Appointments"],
+          ["pay", "Payment checks"],
           ["cust", "Customer Records"],
           ["tx", "Transactions"],
           ["rep", "Reports & Analytics"],
@@ -381,9 +383,36 @@ ${fld("sv_n", "Service name", "text", v.n)}<label>Group</label><select id="sv_g"
         modal();
         render();
       }
+      const payCard = () => {
+        const p = DB.pay || {}, inp = (id, l, v, ph, extra = "") => `<div><label for="${id}">${l}</label><input id="${id}" value="${esc(v || "")}" placeholder="${ph}" ${extra}></div>`;
+        return `<div class="card" style="margin-bottom:1rem"><b>Payment details</b><br><small>Customers see these when they pay for a booking, then upload a screenshot of their receipt for your team to check under Payment checks.</small>
+<div class="g2" style="grid-template-columns:1fr 1fr;margin-top:.6rem">${inp("py_gn", "GCash account name", p.gcashName, "e.g. Fairytale Nails Salon", 'maxlength="60"')}${inp("py_gu", "GCash number", p.gcashNumber, "09XXXXXXXXX", 'maxlength="13" inputmode="numeric"')}${inp("py_mn", "Maya account name", p.mayaName, "Leave blank if you don't use Maya", 'maxlength="60"')}${inp("py_mu", "Maya number", p.mayaNumber, "09XXXXXXXXX", 'maxlength="13" inputmode="numeric"')}</div>
+${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are checked within 30 minutes during opening hours.", 'maxlength="200"')}
+<p><button class="btn sm" onclick="savePay()">Save payment details</button></p>
+<label>Payment QR code (optional)</label><div class="row" style="justify-content:flex-start;align-items:center;gap:1rem">${p.qrUrl ? `<img src="${esc(p.qrUrl)}" alt="Payment QR code" style="width:110px;height:110px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff">` : '<small class="mute">No QR code uploaded yet.</small>'}<input type="file" accept="image/*" style="width:auto" onchange="qrUp(this)"></div></div>`;
+      };
+      async function savePay() {
+        const v = (id) => (document.getElementById(id).value || "").trim(), num = (id) => v(id).replace(/\D/g, "");
+        const g = num("py_gu"), m = num("py_mu");
+        if ((g && !/^09\d{9}$/.test(g)) || (m && !/^09\d{9}$/.test(m))) return toast("Mobile numbers must be 11 digits starting with 09.");
+        if (!g && !m) return toast("Enter at least a GCash or a Maya number.");
+        try {
+          await FN.saveSettings({ pay_gcash_name: v("py_gn"), pay_gcash_number: g, pay_maya_name: v("py_mn"), pay_maya_number: m, pay_note: v("py_nt") });
+          Object.assign(DB.pay, { gcashName: v("py_gn"), gcashNumber: g, mayaName: v("py_mn"), mayaNumber: m, note: v("py_nt") });
+          toast("Payment details saved.");
+        } catch (e) { fail(e); }
+        render();
+      }
+      async function qrUp(el) {
+        const file = el.files && el.files[0];
+        if (!file) return;
+        try { await FN.savePaymentQr(file); await loadCatalogData(); toast("QR code saved."); }
+        catch (e) { fail(e); }
+        render();
+      }
       function ohs() {
         const H = DB.hours;
-        return `<div class="card" style="margin-bottom:1rem"><b>Operating hours</b><div class="cards" style="grid-template-columns:repeat(4,1fr)">${tm("Opens", H.o, "o")}${tm("Closes", H.c, "c")}${tm("Lunch starts", H.ls, "ls")}${tm("Lunch ends", H.le, "le")}</div>${HE ? `<div class="msg">${HE}</div>` : ""}<small>Times use 30-minute steps.</small><label>Open days</label><div class="row" style="justify-content:flex-start;gap:1.2rem">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<label style="display:inline-flex;gap:.3rem;align-items:center;margin:0;font-weight:400"><input type="checkbox" style="width:auto" ${DB.openDays.includes(d) ? "checked" : ""} onchange="togDay(${d},this.checked)">${DN[d]}</label>`).join("")}</div></div>
+        return payCard() + `<div class="card" style="margin-bottom:1rem"><b>Operating hours</b><div class="cards" style="grid-template-columns:repeat(4,1fr)">${tm("Opens", H.o, "o")}${tm("Closes", H.c, "c")}${tm("Lunch starts", H.ls, "ls")}${tm("Lunch ends", H.le, "le")}</div>${HE ? `<div class="msg">${HE}</div>` : ""}<small>Times use 30-minute steps.</small><label>Open days</label><div class="row" style="justify-content:flex-start;gap:1.2rem">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<label style="display:inline-flex;gap:.3rem;align-items:center;margin:0;font-weight:400"><input type="checkbox" style="width:auto" ${DB.openDays.includes(d) ? "checked" : ""} onchange="togDay(${d},this.checked)">${DN[d]}</label>`).join("")}</div></div>
 <div class="card" style="margin-bottom:1rem"><b>Days off</b><div class="row" style="justify-content:flex-start;margin:.5rem 0"><input type="date" id="do" style="width:auto"><button class="btn sm" onclick="addOff()">Add day off</button></div><div class="chips">${
           [...DB.off]
             .sort()
@@ -644,6 +673,7 @@ ${fld("sv_n", "Service name", "text", v.n)}<label>Group</label><select id="sv_g"
       const PG = () => ({
         dash: odash,
         appts: oappts,
+        pay: () => pckHTML(),
         cust: ocust,
         tx: otx,
         rep: orep,
@@ -739,7 +769,7 @@ ${fld("sv_n", "Service name", "text", v.n)}<label>Group</label><select id="sv_g"
         Object.assign(GN, c.GN);
         DB.SV = c.SV; DB.CATS = c.raw.cats;
         TE.splice(0, TE.length, ...c.raw.techs.map((t) => ({ id: t.id, n: t.name, sp: t.specialty, off: t.day_off, rate: +t.commission_rate, on: t.active })));
-        DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off;
+        DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.pay = c.pay || {};
         tab = GR[0];
       }
       async function afterLogin() {
@@ -749,7 +779,7 @@ ${fld("sv_n", "Service name", "text", v.n)}<label>Group</label><select id="sv_g"
         await Promise.all([loadCatalogData(), loadAppts(), loadStaff(), loadRefunds(), loadGal()]);
         if (unwatch) unwatch();
         unwatch = FN.watchOwnerBoard(async () => {
-          await Promise.all([loadAppts(true), loadRefunds(true)]); // background refresh: no loading screen
+          await Promise.all([loadAppts(true), loadRefunds(true), P === "pay" ? pckLoad(true) : null]); // background refresh: no loading screen
           FINK = "";
           if (P === "rep") { try { const k = RG.f + "|" + RG.t; FIN = await (FN.raw || FN).dashboard(RG.f, RG.t); FINK = k; } catch (e) {} }
           if (OW && !$("#md").innerHTML && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) render();

@@ -868,3 +868,15 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 
 .top nav a, a.pr { text-decoration: none; }
 .top nav a:focus-visible, a.pr:focus-visible { outline: 2px solid var(--deep); outline-offset: 2px; }
+
+/* ---------- pay & upload receipt ---------- */
+.pill.verifying { background: var(--beige); color: var(--head); }
+.paytimer { font-size: .85rem; color: var(--mute); text-align: right; }
+.paytimer b { display: block; font-size: 1.4rem; color: var(--red); font-variant-numeric: tabular-nums; }
+.payto { display: flex; gap: 1.2rem; align-items: flex-start; flex-wrap: wrap; }
+.payqr { width: 180px; max-width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.payacct { padding: .5rem 0; }
+.payacct + .payacct { border-top: 1px solid var(--line); }
+.paynum { font-size: 1.15rem; font-weight: 600; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.payh { margin: 1.4rem 0 .5rem; }
+.payto > div { flex: 1 1 220px; }

@@ -16,7 +16,7 @@ box=(t,v,s)=>`<div class="stat"><small>${t}</small><b>${v}</b><small>${s||""}</s
 opts=(list,sel,blank)=>(blank?`<option value="">${blank}</option>`:"")+list.map(x=>`<option value="${x.id}" ${String(x.id)===String(sel)?"selected":""}>${esc(x.n)}</option>`).join("");
 function togglePassword(id,b){const i=document.getElementById(id);if(!i)return;i.type=i.type==="password"?"text":"password";if(b)b.textContent=i.type==="password"?"Show":"Hide"}
 
-const NAV=[["dash","Dashboard"],["appts","Appointments & Queue"],["cust","Customer Records"],["bill","Billing & Payment"]];
+const NAV=[["dash","Dashboard"],["appts","Appointments & Queue"],["pay","Payment checks"],["cust","Customer Records"],["bill","Billing & Payment"]];
 let ST=null,P="dash",DAY=today(),unwatch=null,
 DB={SV:[],TE:[],STN:[],appts:[],walk:[],sales:[],cust:[],q:""};
 const sale=a=>Array.isArray(a.sales)?a.sales[0]:a.sales,
@@ -36,7 +36,7 @@ async function afterLogin(){
   await Promise.all([loadCat(),loadDay()]);
   if(unwatch)unwatch();
   unwatch=FN.watchStaffBoard(async()=>{ // background refresh: fetch first, then redraw; no loading screen
-    await loadDay(true);
+    await loadDay(true);if(P==="pay")await pckLoad(true);
     if(ST&&!$("#md").innerHTML&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))render();
   });
 }
@@ -92,7 +92,7 @@ function bill(){
   return `<div class="card"><div class="row" style="justify-content:space-between"><span><b>${DAY===today()?"Today":DAY}</b></span><button class="btn" onclick="invoice(null)">New walk-in sale</button></div>
   ${mine.length?`<div class="tbl"><table><tr><th>Time</th><th>Customer</th><th>Services</th><th>Total</th><th>Balance</th><th>Status</th><th></th></tr>${mine.map(row).join("")}</table></div>`:'<p class="mute">Nothing to bill yet.</p>'}</div>`;
 }
-const PG={dash,appts,cust,bill};
+const PG={dash,appts,pay:()=>pckHTML(),cust,bill};
 
 /* ---------- handlers ---------- */
 const setSt=(id,s)=>act(()=>FN.setStatus(id,s),s==="service"?"Service started":"Updated"),
