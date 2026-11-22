@@ -1,0 +1,33 @@
+/*
+ * Customer portal motion: kept to the moments that need feedback.
+ *  - page change: short fade                       - dialogs: fade in
+ *  - saved: tick draws itself                       - loading: spinner
+ *  - invalid field: red glow (+ small shake when the device allows motion)
+ *  - home hero: one-time fade-up of the intro + photos (scroll reveal, home page only)
+ *  - booking confirmed: sparkle burst
+ * No hover lifts, button sweeps, floating or pulsing on regular clicks (services, chips, tabs).
+ * Delete the <link> to this file in customer-ui-enhanced.html to switch all of it off.
+ */
+@keyframes ft-fade { from { opacity: 0; } }
+@keyframes ft-draw { to { stroke-dashoffset: 0; } }
+@keyframes ft-spin { to { transform: rotate(360deg); } }
+@keyframes ft-glow { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 35%, transparent); } }
+#app.pg-in > main { animation: ft-fade 0.3s ease both; }
+.mb { animation: ft-fade 0.18s ease both; }
+.tick circle { stroke-dasharray: 151; stroke-dashoffset: 151; animation: ft-draw 0.5s ease forwards; }
+.tick path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: ft-draw 0.35s ease 0.4s forwards; }
+.spin { animation: ft-spin 0.9s linear infinite; }
+.shake { animation: ft-glow 0.7s ease; }
+.btn, .chip, .opt, .tabs button { transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rv { opacity: 0; transform: translateY(16px); }
+  .rv.in { opacity: 1; transform: none; transition: opacity 0.6s ease var(--d, 0ms), transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0ms); }
+  .shake { animation: ft-shake 0.4s ease, ft-glow 0.7s ease; }
+  .confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 15; }
+  .confetti span { position: absolute; top: -2rem; animation: fall 2.3s ease-in forwards; }
+  #scrollbar { display: none; }
+  @keyframes ft-shake { 25%, 75% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
+  @keyframes fall { to { transform: translate(var(--x, 0), 105vh) rotate(var(--r, 180deg)); opacity: 0.15; } }
+  @media print { .rv { opacity: 1 !important; transform: none !important; } .confetti { display: none !important; } }
+}
