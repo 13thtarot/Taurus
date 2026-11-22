@@ -282,7 +282,15 @@
       };
       const MF = (c) =>
         `<p class="row" style="justify-content:flex-end;margin-bottom:0">${c}</p>`;
+      // Set while the live catalog is still loading behind an already-visible public page (see boot()).
+      const QUICK = ["home", "gallery", "about"];
+      let BOOTED = false, BOOT_P = null;
       function go(p) {
+        if (!BOOTED && BOOT_P && !QUICK.includes(p)) { // this page needs live data: wait for it behind the loading screen
+          const w = BOOT_P;
+          (window.Loader ? Loader.run("Gathering services & prices…", () => w) : w).then(() => (BOOTED ? go(p) : ((P = p), boot())));
+          return;
+        }
         P = p;
         if (p === "book" && B.done) B = { step: 0 };
         render();
@@ -819,7 +827,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
             : [["about", "About us"]],
         );
         $("#app").innerHTML =
-          `${DB.test ? '<div class="testbar noprint" role="status">✦ TEST MODE · bookings and deposits are simulated, no real money is charged ✦</div>' : ""}<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#${k}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}</nav><button class="btn" onclick="B={step:0};go('book')">Book Appointment</button> ${U ? `<button class="btn w sm" onclick="doLogout()">Log out</button>` : `<button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span><small>© 2026 Fairytale Nails Salon</small></footer>`;
+          `<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#${k}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}</nav><button class="btn" onclick="B={step:0};go('book')">Book Appointment</button> ${U ? `<button class="btn w sm" onclick="doLogout()">Log out</button>` : `<button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span><small>© 2026 Fairytale Nails Salon</small></footer>`;
         if (y) window.scrollTo(0, y); // same-page updates keep your place; go() scrolls to top on page changes
       }
 
@@ -881,23 +889,34 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         return true;
       }
       async function boot() {
-        $("#app").innerHTML = ""; // the loading screen is already covering the page
+        // Public pages (home, gallery, about) work with the bundled defaults, so show them right away and
+        // fetch the live catalog silently in the background. Pages that need live data keep the loading screen.
+        let done;
+        BOOT_P = new Promise((r) => (done = r));
+        try { await loadStart(); } finally { done(); }
+      }
+      async function loadStart() {
+        const quick = QUICK.includes(P), api = quick && FN.raw ? FN.raw : FN;
+        if (quick) { render(); window.Loader && Loader.endInitial(true); }
+        else $("#app").innerHTML = ""; // the loading screen is already covering the page
         try {
-          const c = await FN.loadCatalog();
-          GAL = await Promise.resolve().then(() => FN.loadGallery()).catch(() => null); // never blocks the site if the gallery isn't set up
+          const c = await api.loadCatalog();
+          GAL = await Promise.resolve().then(() => api.loadGallery()).catch(() => null); // never blocks the site if the gallery isn't set up
           GR.splice(0, GR.length, ...c.GR);
           Object.keys(GN).forEach((k) => delete GN[k]);
           Object.assign(GN, c.GN);
           DB.SV = c.SV; TE.splice(0, TE.length, ...c.TE);
           DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode;
           tab = GR[0];
-          if (await FN.currentUser()) { await startSession(); await resumePayment(); }
+          if (await api.currentUser()) { await startSession(); await resumePayment(); }
         } catch (e) {
           console.error(e);
+          if (quick) return; // the page is already showing the bundled defaults
           $("#app").innerHTML = '<p style="text-align:center;padding:5rem 1rem">Could not reach the salon system. <a class="pr" style="cursor:pointer" onclick="boot()">Try again</a></p>';
           window.Loader && Loader.endInitial();
           return;
         }
+        BOOTED = true;
         render();
         window.Loader && Loader.endInitial(); // reveal only after the first screen is fully rendered
       }

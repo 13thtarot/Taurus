@@ -12,10 +12,13 @@
 
   const key = () => { try { return P + (P === "book" && B ? ":" + B.step + (B.done ? "d" : "") : ""); } catch (e) { return ""; } };
 
+  let scrolled = false; // true once the visitor has scrolled; until then there is nothing to measure
   function onScroll() {
-    const y = window.scrollY || 0, top = document.querySelector(".top");
+    // Read every layout value first, then write, so the browser lays the page out only once.
+    const y = window.scrollY || 0, max = bar ? document.documentElement.scrollHeight - innerHeight : 0, top = document.querySelector(".top");
+    scrolled = y > 0;
     if (top) top.classList.toggle("scrolled", y > 8);
-    if (bar) bar.style.setProperty("--p", Math.min(1, y / Math.max(1, document.documentElement.scrollHeight - innerHeight)).toFixed(3));
+    if (bar) bar.style.setProperty("--p", Math.min(1, y / Math.max(1, max)).toFixed(3));
   }
   function celebrate() {
     try { if (!(B && B.done)) return; } catch (e) { return; }
@@ -31,7 +34,7 @@
     setTimeout(() => box.remove(), 2800);
   }
   function motion() {
-    requestAnimationFrame(onScroll); // read layout after the browser has painted, not right after the DOM changed
+    if (scrolled) requestAnimationFrame(onScroll); // at the top of the page there is nothing to update, so skip the layout read
     const nav = key() !== lastKey; lastKey = key();
     if (!nav) return; // background refreshes: leave everything as it is
     // Page change: a soft fade for EVERY visitor (opacity only, so it is fine with reduced motion too).

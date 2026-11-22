@@ -132,6 +132,7 @@
   var shownAt = Date.now();
   var hideTimer = null;
   var stickyUntil = 0;
+  var HIDE_NOW = false;
 
   function show(label) {
     clearTimeout(hideTimer);
@@ -141,7 +142,8 @@
   }
   function scheduleHide() {
     clearTimeout(hideTimer);
-    var wait = Math.max(HIDE_GRACE_MS, MIN_VISIBLE_MS - (Date.now() - shownAt), stickyUntil - Date.now());
+    var wait = HIDE_NOW ? 0 : Math.max(HIDE_GRACE_MS, MIN_VISIBLE_MS - (Date.now() - shownAt), stickyUntil - Date.now());
+    HIDE_NOW = false;
     hideTimer = setTimeout(function () {
       if (pending > 0) return;                       // another call started during the grace period
       el.classList.remove("on");
@@ -191,11 +193,14 @@
     return out;
   }
 
-  function endInitial() {
+  // now = true: the page is already rendered, so fade the start-up screen out straight away (no minimum time).
+  function endInitial(now) {
     if (!initial) return;
     initial = false;
     pending = Math.max(0, pending - 1);
-    if (pending === 0) scheduleHide();
+    if (pending !== 0) return;
+    if (now) { shownAt = 0; HIDE_NOW = true; }
+    scheduleHide();
   }
 
   // Safety net: never leave a user staring at a spinner if something hangs.

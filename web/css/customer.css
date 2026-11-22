@@ -10,6 +10,9 @@
         --pink: #fbe6e6;
         --beige: #f0ebdc;
         --line: #e8e4d8;
+        --on-red: #fff; /* text on coral buttons */
+        --deep-bg: #4e6240; /* green panels behind white text */
+        --step-num: #4e6240;
         box-sizing: border-box;
         padding-top: env(safe-area-inset-top, 0px);
         padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -23,10 +26,13 @@
           --mute: #a9ae9c;
           --sage: #2f3a28;
           --deep: #6f8a5a;
-          --red: #e8625b;
+          --red: #f2827b;
           --pink: #3a2626;
           --beige: #2d2b21;
           --line: #3a3e32;
+          --on-red: #1c1f18;
+          --deep-bg: #44583a;
+          --step-num: #a9c48f;
         }
       }
       :root[data-theme="dark"] {
@@ -37,10 +43,13 @@
         --mute: #a9ae9c;
         --sage: #2f3a28;
         --deep: #6f8a5a;
-        --red: #e8625b;
+        --red: #f2827b;
         --pink: #3a2626;
         --beige: #2d2b21;
         --line: #3a3e32;
+        --on-red: #1c1f18;
+        --deep-bg: #44583a;
+        --step-num: #a9c48f;
       }
       * {
         box-sizing: border-box;
@@ -90,7 +99,7 @@
         border-radius: 10px;
         padding: 0.6rem 1.1rem;
         background: var(--red);
-        color: #fff;
+        color: var(--on-red);
         font-weight: 500;
         cursor: pointer;
       }
@@ -224,7 +233,7 @@
         flex: none;
       }
       .band {
-        background: var(--deep);
+        background: var(--deep-bg);
         color: #fff;
         padding: 3rem 1.4rem;
         text-align: center;
@@ -246,7 +255,7 @@
         height: 26px;
         border-radius: 50%;
         background: var(--pink);
-        color: var(--deep);
+        color: var(--step-num);
         font-size: 0.7rem;
       }
       .steps4 h3 {
@@ -297,6 +306,10 @@
         color: var(--red);
         font-weight: 600;
       }
+      .row > a.pr {
+        display: inline-block;
+        padding: 0.4rem 0; /* at least 24px tall so it is easy to tap */
+      }
       .chips {
         display: flex;
         gap: 0.5rem;
@@ -312,9 +325,9 @@
         cursor: pointer;
       }
       .chip.on {
-        background: var(--deep);
+        background: var(--deep-bg);
         color: #fff;
-        border-color: var(--deep);
+        border-color: var(--deep-bg);
       }
       .chip:disabled {
         opacity: 0.35;
@@ -378,7 +391,7 @@
       }
       .cal .on {
         background: var(--red);
-        color: #fff;
+        color: var(--on-red);
       }
       .cal button:disabled {
         opacity: 0.3;
@@ -672,7 +685,7 @@
       }
       .stp.cur .dot,
       .stp.done .dot {
-        background: var(--deep);
+        background: var(--deep-bg);
         color: #fff;
       }
       .stp small {
@@ -739,7 +752,6 @@
     
 
 /* ===================================================================== customer account / prices / booking additions */
-.testbar { background: repeating-linear-gradient(135deg, var(--beige) 0 14px, color-mix(in srgb, var(--beige) 70%, var(--card)) 14px 28px); color: var(--head); text-align: center; font-size: .72rem; font-weight: 600; letter-spacing: .08em; padding: .3rem .8rem; border-bottom: 1px solid var(--line); }
 
 /* field hints + numbers-only inputs */
 .fhint { display: block; margin-top: .25rem; font-size: .74rem; color: var(--mute); min-height: 1.1em; }
@@ -846,7 +858,6 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 #app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 #app > main { flex: 1 0 auto; }
 #app > .foot { margin-top: 0; }
-.testbar { text-align: left; }
 .gal-head { text-align: left !important; }
 .mc { text-align: left; }
 .mc .row { justify-content: flex-end; }
