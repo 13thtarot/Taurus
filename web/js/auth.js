@@ -107,3 +107,54 @@ export async function changeEmail(email) {
   if (done) { try { await sb.from("profiles").update({ email }).eq("id", user.id); } catch (e) { /* the sync trigger handles it */ } }
   return { pending: !done };
 }
+
+/* ---------- forgot password ---------- */
+
+/**
+ * Emails a reset link that brings the person back to THIS page (customer, staff or owner).
+ * Never reveals whether an account exists: unknown emails/usernames succeed silently.
+ */
+export async function sendPasswordReset(identifier) {
+  let email = (identifier || "").trim().toLowerCase();
+  if (!email) throw new Error("Enter your email address.");
+  if (!email.includes("@")) {
+    const { data } = await sb.rpc("email_for_username", { p_username: email });
+    if (!data) return true;
+    email = data;
+  }
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email address.");
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) {
+    const m = (error.message || "").toLowerCase();
+    if (m.includes("rate limit") || m.includes("too many") || m.includes("seconds")) throw new Error("Please wait a minute before asking for another link.");
+    throw new Error("We couldn't send the email right now. Please try again in a few minutes.");
+  }
+  return true;
+}
+
+/**
+ * Call once at start-up. If the page was opened from a reset email, signs the person in for the reset and
+ * cleans the address bar. Returns "reset" (show the new-password form), "expired" (link used or too old) or null.
+ */
+export async function recoveryFromUrl() {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const clean = () => history.replaceState(null, "", location.pathname + location.search);
+  if (h.get("error_code") || (h.get("error") && h.get("error_description"))) { clean(); return "expired"; }
+  if (h.get("type") !== "recovery" || !h.get("access_token")) return null;
+  const { error } = await sb.auth.setSession({ access_token: h.get("access_token"), refresh_token: h.get("refresh_token") || "" });
+  clean();
+  return error ? "expired" : "reset";
+}
+
+/** Saves the new password for the signed-in (recovering) user. */
+export async function updatePassword(password) {
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) {
+    const m = (error.message || "").toLowerCase();
+    if (m.includes("different from the old")) throw new Error("Choose a password you haven't used before.");
+    if (m.includes("session") || m.includes("jwt") || m.includes("expired")) throw new Error("This reset link has expired. Please ask for a new one.");
+    if (m.includes("weak") || m.includes("password")) throw new Error("Please choose a stronger password.");
+    throw new Error("We couldn't save your new password. Please try again.");
+  }
+  return true;
+}

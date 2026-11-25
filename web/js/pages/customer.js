@@ -258,7 +258,7 @@
         if (SS && SS.role === "customer")
           U = DB.users.find((x) => x.id === SS.id) || null;
         const hp = location.hash.slice(1);
-        if (["home", "services", "gallery", "about", "login", "signup", "book", "mine", "acct"].includes(hp)) P = hp;
+        if (["home", "services", "gallery", "about", "login", "signup", "forgot", "book", "mine", "acct"].includes(hp)) P = hp;
       }
       const te = (id) => (TE.find((x) => x.id === id) || { n: "Unassigned" }).n,
         LB = {
@@ -383,9 +383,43 @@
           .join("")}</div></section>`);
       const W = (x, w = 680) =>
         `<section class="sec"><div class="wrap" style="max-width:${w}px">${x}</div></section>`;
+      /* ---------- forgot password: email a reset link, then choose a new password ---------- */
+      let FG = {}, RS = null; // FG: { sent, err, busy }  RS: "reset" | "expired" | "done"
+      const forgot = () =>
+        W(FG.sent
+          ? `<div class="card auth"><h2>Check your email</h2><p>If an account uses <b>${esc(FG.email)}</b>, we've sent it a link to reset your password. The link works once and expires after about an hour.</p><p class="mute">Not there after a few minutes? Check your spam or promotions folder, or <a class="pr" style="cursor:pointer" onclick="FG={email:FG.email};render()">send it again</a>.</p><p><button class="btn" style="width:100%" onclick="go('login')">Back to log in</button></p></div>`
+          : `<div class="card auth"><h2>Forgot your password?</h2><p class="mute">Enter the email (or username) on your account and we'll send you a link to set a new password.</p><label for="fg_e">Email or username</label><input id="fg_e" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com" value="${esc(FG.email || "")}" onkeydown="if(event.key==='Enter')doForgot()">${FG.err ? `<div class="msg">${esc(FG.err)}</div>` : ""}<p><button class="btn" style="width:100%" ${FG.busy ? "disabled" : ""} onclick="doForgot()">${FG.busy ? "Sending..." : "Send reset link"}</button></p><small>Remembered it? <a class="pr" href="#login" onclick="event.preventDefault();go('login')">Log in</a></small></div>`,
+          460);
+      async function doForgot() {
+        const e = (($("#fg_e") || {}).value || "").trim();
+        FG.email = e;
+        if (!e) { FG.err = "Enter your email address."; return render(); }
+        FG.busy = true; FG.err = ""; render();
+        try { await FN.sendPasswordReset(e); FG.sent = true; }
+        catch (x) { FG.err = x.message; }
+        FG.busy = false; render();
+      }
+      const reset = () => {
+        if (RS === "done")
+          return W(`<div class="card auth"><h2>Password updated</h2><p>Your new password is saved and you're logged in.</p><p><button class="btn" style="width:100%" onclick="RS=null;go('mine')">Go to my appointments</button></p></div>`, 460);
+        if (RS !== "reset")
+          return W(`<div class="card auth"><h2>This link has expired</h2><p>Password reset links work only once and expire after about an hour. Please ask for a new one.</p><p><button class="btn" style="width:100%" onclick="RS=null;FG={};go('forgot')">Send a new link</button></p></div>`, 460);
+        return W(`<div class="card auth"><h2>Choose a new password</h2><p class="mute">Pick a strong password you haven't used before.</p><label for="su_w">New password</label><div class="pwrow"><input id="su_w" type="password" autocomplete="new-password" placeholder="Create a strong password" maxlength="72" oninput="pwCheck()"><button class="eye" type="button" onclick="togglePassword('su_w',this)">Show</button></div><div class="pwm" id="pwm" data-s="0"><i></i><i></i><i></i><i></i><b></b></div><ul class="pwl" id="pwl">${PWR.map(([t]) => `<li>• ${t}</li>`).join("")}</ul><label for="su_w2">Confirm new password</label><div class="pwrow"><input id="su_w2" type="password" autocomplete="new-password" placeholder="Type it again" maxlength="72" oninput="pwCheck()" onkeydown="if(event.key==='Enter')doReset()"><button class="eye" type="button" onclick="togglePassword('su_w2',this)">Show</button></div><small class="fhint" id="su_w2_h">Type the same password again.</small><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doReset()">Save new password</button></p></div>`, 460);
+      };
+      async function doReset() {
+        const w = $("#su_w").value, w2 = $("#su_w2").value, failed = pwResults(w).filter((r) => !r[1]).map((r) => r[0]);
+        if (failed.length) { err("Your password still needs: " + failed.map((t) => t[0].toLowerCase() + t.slice(1)).join(", ") + "."); shake("su_w"); pwCheck(); return; }
+        if (w !== w2) { err("The two passwords do not match."); shake("su_w2"); return; }
+        try {
+          await FN.updatePassword(w);
+          RS = "done";
+          if (!(await startSession())) { RS = null; return go("login"); } // staff/owner account: sign in through their page
+          render();
+        } catch (e) { err(e.message); }
+      }
       const login = () =>
         W(
-          `<div class="card auth"><h2>Welcome back</h2><p class="mute">Log in to manage your appointments and bookings.</p><label for="li_u">Email or username</label><input id="li_u" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com"><label for="li_p">Password</label><div class="pwrow"><input id="li_p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"><button class="eye" type="button" onclick="togglePassword('li_p',this)">Show</button></div><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doLogin()">Log in</button></p><small>New here? <a class="pr" href="#signup" onclick="event.preventDefault();go('signup')">Create an account</a></small></div>`,
+          `<div class="card auth"><h2>Welcome back</h2><p class="mute">Log in to manage your appointments and bookings.</p><label for="li_u">Email or username</label><input id="li_u" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com"><label for="li_p">Password</label><div class="pwrow"><input id="li_p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"><button class="eye" type="button" onclick="togglePassword('li_p',this)">Show</button></div><p style="margin:.4rem 0 0;text-align:right"><a class="pr" href="#forgot" onclick="event.preventDefault();FG={};go('forgot')"><small>Forgot password?</small></a></p><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doLogin()">Log in</button></p><small>New here? <a class="pr" href="#signup" onclick="event.preventDefault();go('signup')">Create an account</a></small></div>`,
           460,
         );
       const gate = () =>
@@ -811,6 +845,8 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         about,
         login,
         signup,
+        forgot,
+        reset,
         book,
         mine,
         acct,
@@ -898,7 +934,11 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         // fetch the live catalog silently in the background. Pages that need live data keep the loading screen.
         let done;
         BOOT_P = new Promise((r) => (done = r));
-        try { await loadStart(); } finally { done(); }
+        try {
+          const rec = await (FN.raw || FN).recoveryFromUrl().catch(() => "expired");
+          if (rec) { RS = rec; P = "reset"; }
+          await loadStart();
+        } finally { done(); }
       }
       async function loadStart() {
         const quick = QUICK.includes(P), api = quick && FN.raw ? FN.raw : FN;
@@ -913,7 +953,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           DB.SV = c.SV; TE.splice(0, TE.length, ...c.TE);
           DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode; DB.hold = c.holdMinutes || 5; DB.pay = c.pay || {};
           tab = GR[0];
-          if (await api.currentUser()) { await startSession(); await resumePayment(); }
+          if (P !== "reset" && (await api.currentUser())) { await startSession(); await resumePayment(); }
         } catch (e) {
           console.error(e);
           if (quick) return; // the page is already showing the bundled defaults
@@ -941,7 +981,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         const bad = !NAME_RE.test(n) ? ["su_n", "Enter your full name (letters only, at least 2 characters)."]
           : !EMAIL_RE.test(e) ? ["su_e", "Enter a valid email address, e.g. you@example.com."]
           : !PH_RE.test(p) ? ["su_p", p.length !== 11 ? `Enter your complete 11-digit mobile number (you have ${p.length}).` : "Mobile numbers start with 09."]
-          : failed.length ? ["su_w", "Your password still needs: " + failed.join(", ").toLowerCase() + "."]
+          : failed.length ? ["su_w", "Your password still needs: " + failed.map((t) => t[0].toLowerCase() + t.slice(1)).join(", ") + "."]
           : w !== w2 ? ["su_w2", "The two passwords do not match."] : null;
         if (bad) { err(bad[1]); shake(bad[0]); document.getElementById(bad[0]).focus(); pwCheck(); return; }
         try {

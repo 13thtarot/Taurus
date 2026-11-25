@@ -44,7 +44,7 @@ async function refresh(){await loadDay();render()}
 const act=async(fn,ok)=>{try{await fn();if(ok)toast(ok);await refresh()}catch(e){fail(e)}};
 
 /* ---------- sign in ---------- */
-const plHTML=()=>`<section class="sec"><div class="wrap" style="max-width:420px"><div class="lg" style="width:56px;height:56px;font-size:2rem;margin:0 auto 1rem">f</div><div class="card auth"><h2 style="text-align:center">Staff sign in</h2><p class="mute" style="text-align:center">Sign in to run the salon floor.</p><label>Username or email</label><input id="lu" autocomplete="username" autocapitalize="none"><label for="lp">Password</label><div class="pwrow"><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')plog()" placeholder="Enter your password"><button class="eye" type="button" onclick="togglePassword('lp',this)">Show</button></div><div id="le"></div><p><button class="btn" style="width:100%" onclick="plog()">Sign in</button></p></div></div></section>`;
+const plHTML=()=>`<section class="sec"><div class="wrap" style="max-width:420px"><div class="lg" style="width:56px;height:56px;font-size:2rem;margin:0 auto 1rem">f</div><div class="card auth"><h2 style="text-align:center">Staff sign in</h2><p class="mute" style="text-align:center">Sign in to run the salon floor.</p><label>Username or email</label><input id="lu" autocomplete="username" autocapitalize="none"><label for="lp">Password</label><div class="pwrow"><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')plog()" placeholder="Enter your password"><button class="eye" type="button" onclick="togglePassword('lp',this)">Show</button></div>${pwrLink()}<div id="le"></div><p><button class="btn" style="width:100%" onclick="plog()">Sign in</button></p></div></div></section>`;
 async function plog(){
   const u=$("#lu").value.trim(),p=$("#lp").value;
   if(!u||!p)return $("#le").innerHTML='<div class="msg">Enter your username or email and password.</div>';
@@ -160,6 +160,8 @@ function render(){
 }
 async function boot(){
   $("#app").innerHTML="";
+  const rec=await (FN.raw||FN).recoveryFromUrl().catch(()=>"expired");
+  if(rec){render();window.Loader&&Loader.endInitial();return pwrStart(rec,boot)}
   try{if((await FN.currentUser())&&(await FN.requirePortalRole("staff")))await afterLogin()}
   catch(e){console.error(e);$("#app").innerHTML='<p style="text-align:center;padding:5rem 1rem">Could not reach the salon system. <a class="pr" style="cursor:pointer" onclick="boot()">Try again</a></p>';window.Loader&&Loader.endInitial();return}
   render();window.Loader&&Loader.endInitial();
