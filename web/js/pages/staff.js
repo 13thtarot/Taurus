@@ -68,7 +68,7 @@ function acts(a){
   const b=(l,s,c="")=>`<button class="btn w ${c}" onclick="setSt('${a.id}','${s}')">${l}</button>`;
   if(a.status==="confirmed")return b("Check in","waiting")+b("No-show","noshow")+b("Cancel","cancelled");
   if(a.status==="waiting")return b("Start","service")+b("Cancel","cancelled");
-  if(a.status==="service"){const s=sale(a);return s&&s.status==="paid"?`<span class="pill completed">Paid</span><button class="btn" onclick="askDone('${a.id}')">Mark as completed</button>`:`<button class="btn" onclick="invoice('${a.id}')">Bill</button>`}
+  if(a.status==="service"){const s=sale(a);return s&&s.status==="paid"?`<span class="pill completed">Paid</span><button class="btn" onclick="askDone('${a.id}')">Mark as completed</button>`:s&&s.status==='open'&&+s.balance_due>0?`<button class="btn w" onclick="invoice('${a.id}')">Edit bill</button><button class="btn" onclick="payM('${s.id}',${+s.balance_due})">Take payment ${php(s.balance_due)}</button>`:`<button class="btn" onclick="invoice('${a.id}')">Bill</button>`}
   return "";
 }
 function appts(){
@@ -125,7 +125,7 @@ async function saveInv(){
   const lines=LN.filter(l=>l.service_id).map(l=>({service_id:+l.service_id,technician_id:l.technician_id?+l.technician_id:null,...(l.unit_price?{unit_price:+l.unit_price}:{})}));
   if(!lines.length)return toast(ERR.NO_LINES);
   if(lines.some(l=>!l.technician_id))return toast(ERR.TECHNICIAN_REQUIRED);
-  try{await FN.createInvoice(INV.id,INV.id?null:($("#iw")||{}).value,lines);modal();toast("Invoice saved");await refresh()}catch(e){fail(e)}
+  try{const r=await FN.createInvoice(INV.id,INV.id?null:($("#iw")||{}).value,lines);modal();await refresh();if(r&&r.status==="open"&&+r.balance_due>0){toast("Bill saved. Now collect the balance.");payM(r.id,+r.balance_due)}else toast(r&&r.status==="paid"?"Bill saved and already fully paid. You can mark it completed.":"Bill saved")}catch(e){fail(e)}
 }
 function payM(sid,bal){
   FN.newPaymentAttempt();
