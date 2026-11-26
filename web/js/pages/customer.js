@@ -1112,11 +1112,13 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (canMove(a)) b.push(`<button class="btn sm w" onclick="openResched('${a.id}')">Reschedule</button>`);
         const live = a.req && ["confirmed", "verifying"].includes(a.status);
         if (live && a.req.status === "pending") b.push(`<button class="btn sm w" onclick="askWithdraw('${a.id}')">Withdraw request</button>`);
-        if (["pending", "confirmed"].includes(a.status)) b.push(`<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`);
+        const past = a.startISO && new Date(a.startISO) <= Date.now();
+        if (["pending", "confirmed"].includes(a.status) && !past) b.push(`<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`);
         const rq = !live ? "" : a.req.status === "pending"
           ? `<div class="msg ok" style="margin:.5rem 0 0">Reschedule requested: <b>${esc(reqWhen(a.req))}</b>. Waiting for the salon to approve. Your current time stays booked until then.</div>`
           : `<div class="msg" style="margin:.5rem 0 0">Your request to move to ${esc(reqWhen(a.req))} was declined${a.req.reason ? ": " + esc(a.req.reason) : ""}. Your original time is kept.</div>`;
         const note = a.status === "pending" ? "<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>"
+          : past && ["confirmed", "verifying", "waiting", "service"].includes(a.status) ? "<small>This appointment time has passed. It will move to Completed once the salon marks your visit as done.</small>"
           : a.status === "verifying" ? "<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>" : "";
         return `${rq}<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
       }
