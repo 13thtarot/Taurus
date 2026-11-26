@@ -8,6 +8,11 @@ export async function appointmentsForDay(isoDate) {
   const to = new Date(new Date(isoDate + "T00:00:00+08:00").getTime() + 864e5).toISOString();
   return must(await sb.from("appointments").select(APPT).gte("start_at", from).lt("start_at", to).order("start_at"));
 }
+/** All appointments from 60 days ago to 90 days ahead (newest window first-sorted by time), up to 500. */
+export async function allAppointments() {
+  const from = new Date(Date.now() - 60 * 864e5).toISOString(), to = new Date(Date.now() + 90 * 864e5).toISOString();
+  return must(await sb.from("appointments").select(APPT).gte("start_at", from).lt("start_at", to).order("start_at").limit(500));
+}
 export const appointmentHistory = async (id) =>
   must(await sb.from("appointment_history").select("*").eq("appointment_id", id).order("created_at"));
 export const walkinQueue = async () =>

@@ -568,16 +568,20 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         catch (e) { fail(e); }
         render();
       }
+      const tdy = () => { const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((x) => [x.type, x.value])); return p.year + "-" + p.month + "-" + p.day; };
       function oappts() {
         let L = [...DB.appts];
         const q = F.q.toLowerCase();
-        if (F.s) L = L.filter((a) => a.status === F.s);
+        const nf = (a) => ["confirmed", "waiting", "service"].includes(a.status) && a.date < tdy();
+        const nAttn = L.filter(nf).length;
+        if (F.s === "attn") L = L.filter(nf);
+        else if (F.s) L = L.filter((a) => a.status === F.s);
         if (q)
           L = L.filter((a) =>
             (a.name + a.svc + a.code).toLowerCase().includes(q),
           );
         L.sort((a, b) => key(b).localeCompare(key(a)));
-        return `<div class="row" style="justify-content:flex-start;margin-bottom:.8rem"><input style="max-width:240px" placeholder="Search" value="${esc(F.q)}" onchange="F.q=this.value;render()"><select style="max-width:200px" onchange="F.s=this.value;render()"><option value="">All statuses</option>${Object.keys(
+        return `<div class="row" style="justify-content:flex-start;margin-bottom:.8rem"><input style="max-width:240px" placeholder="Search" value="${esc(F.q)}" onchange="F.q=this.value;render()"><select style="max-width:200px" onchange="F.s=this.value;render()"><option value="">All statuses</option><option value="attn" ${F.s === "attn" ? "selected" : ""}>Needs attention (${nAttn})</option>${Object.keys(
           LB,
         )
           .map(
@@ -586,13 +590,13 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
           )
           .join(
             "",
-          )}</select></div><div class="card"><div class="tbl"><table><tr><th>When</th><th>Customer</th><th>Service</th><th>Technician</th><th>Station</th><th>Status</th><th></th></tr>${L.slice(
+          )}</select>${nAttn ? `<button class="btn sm ${F.s === "attn" ? "" : "w"}" onclick="F.s=F.s==='attn'?'':'attn';render()">${nAttn} not finished</button>` : ""}</div>${F.s === "attn" ? '<p class="mute">Bookings whose day has passed but were never finished. Have staff check them in, bill them and mark them completed, or mark them as no-show.</p>' : ""}<div class="card"><div class="tbl"><table><tr><th>When</th><th>Customer</th><th>Service</th><th>Technician</th><th>Station</th><th>Status</th><th></th></tr>${L.slice(
           0,
           200,
         )
           .map(
             (a) =>
-              `<tr><td>${a.date}<br><small>${m2t(a.start)}</small></td><td>${esc(a.name)}</td><td>${a.svc}</td><td>${te(a.staff)}</td><td>${a.station || "-"}</td><td>${pill(a.status)}${a.status === "service" && a.saleStatus === "paid" ? ' <span class="pill completed">Paid</span>' : ""}</td><td class="row" style="flex-wrap:nowrap">${a.status === "service" && a.saleStatus === "paid" ? `<button class="btn sm" onclick="askDone('${a.id}')">Mark as completed</button>` : ""}<button class="btn sm w" onclick="showH('${a.id}')">History</button></td></tr>`,
+              `<tr><td>${a.date}<br><small>${m2t(a.start)}</small></td><td>${esc(a.name)}</td><td>${a.svc}</td><td>${te(a.staff)}</td><td>${a.station || "-"}</td><td>${pill(a.status)}${nf(a) ? ' <span class="pill noshow">Not finished</span>' : ""}${a.status === "service" && a.saleStatus === "paid" ? ' <span class="pill completed">Paid</span>' : ""}</td><td class="row" style="flex-wrap:nowrap">${a.status === "service" && a.saleStatus === "paid" ? `<button class="btn sm" onclick="askDone('${a.id}')">Mark as completed</button>` : ""}<button class="btn sm w" onclick="showH('${a.id}')">History</button></td></tr>`,
           )
           .join(
             "",

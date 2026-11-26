@@ -72,10 +72,11 @@ function acts(a){
   return "";
 }
 function appts(){
+  if(AV.on)return allView();
   const rows=DB.appts.map(a=>`<tr><td>${hm(a.start_at)}</td><td>${esc(a.customer_name)}${a.is_walkin?" <small>(walk-in)</small>":""}<br><small>${esc(a.code)}</small></td><td>${esc(svcs(a))}</td>
   <td>${live(a)?`<select onchange="assign('${a.id}',this.value,'${a.station_id||""}')">${opts(DB.TE,a.technician_id,"Unassigned")}</select>`:esc(who(a.technician_id))}</td>
   <td>${live(a)&&DB.STN.length?`<select onchange="assign('${a.id}','${a.technician_id||""}',this.value)">${opts(DB.STN,a.station_id,"—")}</select>`:"—"}</td><td>${pill(a.status)}</td><td class="row">${acts(a)}</td></tr>`).join("");
-  return `<div class="card"><div class="row"><b>Day</b><input type="date" value="${DAY}" onchange="setDay(this.value)"><button class="btn w" onclick="setDay(today())">Today</button></div>
+  return `<div class="card"><div class="row"><b>Day</b><input type="date" value="${DAY}" onchange="setDay(this.value)"><button class="btn w" onclick="setDay(today())">Today</button><button class="btn w" onclick="openAll()">Show all appointments</button></div>
   ${rows?`<div class="tbl"><table><tr><th>Time</th><th>Customer</th><th>Services</th><th>Technician</th><th>Station</th><th>Status</th><th></th></tr>${rows}</table></div>`:'<p class="mute">No appointments on this day.</p>'}</div>
   <div class="card"><h3>Walk-in queue</h3>${DB.walk.length?DB.walk.map(w=>`<div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding:.5rem 0"><span><b>${esc(w.guest_name)}</b> · ${esc(w.service_name)}<br><small>waiting since ${hm(w.created_at)}</small></span><span class="row"><button class="btn" onclick="act2(()=>FN.checkinWalkin(${w.id}),'Checked in')">Check in</button><button class="btn w" onclick="act2(()=>FN.removeWalkin(${w.id}),'Removed')">Remove</button></span></div>`).join(""):'<p class="mute">Nobody is waiting.</p>'}
   <div class="row" style="margin-top:.8rem"><input id="wn" placeholder="Customer name"><select id="ws">${opts(DB.SV,"","Service…")}</select><button class="btn" onclick="addW()">Add walk-in</button></div></div>`;
@@ -91,6 +92,23 @@ function bill(){
     <td class="row">${live(a)&&(!s||s.status==="open")?`<button class="btn w" onclick="invoice('${a.id}')">${s?"Edit":"Invoice"}</button>`:""}${s&&s.status==="open"&&+s.balance_due>0?`<button class="btn" onclick="payM('${s.id}',${+s.balance_due})">Take payment</button><button class="btn w" onclick="voidM('${s.id}')">Void</button>`:""}${s&&s.status==="paid"?`<button class="btn w" onclick="rcpt('${s.id}')">Receipt</button>`:""}${pays.length&&s&&s.status!=="voided"?`<button class="btn w" onclick="refM('${a.id}')">Refund</button>`:""}</td></tr>`};
   return `<div class="card"><div class="row" style="justify-content:space-between"><span><b>${DAY===today()?"Today":DAY}</b></span><button class="btn" onclick="invoice(null)">New walk-in sale</button></div>
   ${mine.length?`<div class="tbl"><table><tr><th>Time</th><th>Customer</th><th>Services</th><th>Total</th><th>Balance</th><th>Status</th><th></th></tr>${mine.map(row).join("")}</table></div>`:'<p class="mute">Nothing to bill yet.</p>'}</div>`;
+}
+/* ---------- "Show all appointments": every booking across dates, so staff can find where one is ---------- */
+let AV={on:false,list:[],f:"attn",q:""};
+const dOf=iso=>{const p=parts(iso);return `${p.year}-${p.month}-${p.day}`},
+ dLabel=iso=>new Date(iso).toLocaleDateString("en-PH",{timeZone:"Asia/Manila",weekday:"short",month:"short",day:"numeric",year:"numeric"}),
+ attn=a=>["confirmed","waiting","service"].includes(a.status)&&dOf(a.start_at)<today();
+async function openAll(){try{AV.list=await FN.allAppointments();AV.on=true}catch(e){return fail(e)}render()}
+async function goDay(d){AV.on=false;await setDay(d)}
+function allView(){
+  const q=AV.q.toLowerCase(),F={attn:["Needs attention",attn],up:["Upcoming",a=>dOf(a.start_at)>=today()&&["held","confirmed","waiting","service"].includes(a.status)],all:["All",()=>true]},
+  L=AV.list.filter(F[AV.f][1]).filter(a=>!q||[a.customer_name,a.code,svcs(a),who(a.technician_id)].join(" ").toLowerCase().includes(q));
+  if(AV.f!=="up")L.reverse();
+  const n=AV.list.filter(attn).length;
+  return `<div class="card"><div class="row" style="justify-content:space-between"><b>All appointments</b><button class="btn w" onclick="AV.on=false;render()">Back to day view</button></div>
+  <div class="row" style="margin:.6rem 0">${Object.entries(F).map(([k,[l]])=>`<button class="btn ${AV.f===k?"":"w"} sm" onclick="AV.f='${k}';render()">${l}${k==="attn"?" ("+n+")":""}</button>`).join("")}<input id="avq" placeholder="Search name, booking no., service or technician" value="${esc(AV.q)}" oninput="AV.q=this.value;render();const i=$('#avq');i.focus();i.setSelectionRange(i.value.length,i.value.length)" style="flex:1;min-width:12rem"></div>
+  ${AV.f==="attn"?'<p class="mute" style="margin-top:0">Bookings whose day has passed but were never finished. Open the day to check them in, bill them and mark them completed, or mark them as no-show.</p>':""}
+  ${L.length?`<div class="tbl"><table><tr><th>Date</th><th>Customer</th><th>Services</th><th>Technician</th><th>Status</th><th></th></tr>${L.map(a=>`<tr><td>${dLabel(a.start_at)}<br><small>${hm(a.start_at)}</small></td><td>${esc(a.customer_name)}<br><small>${esc(a.code)}</small></td><td>${esc(svcs(a))}</td><td>${esc(who(a.technician_id))}</td><td>${pill(a.status)}${attn(a)?' <span class="pill noshow">Not finished</span>':""}</td><td><button class="btn sm" onclick="goDay('${dOf(a.start_at)}')">Open day</button></td></tr>`).join("")}</table></div><small class="mute">Showing bookings from the last 60 days and the next 90 days.</small>`:'<p class="mute">No appointments here.</p>'}</div>`;
 }
 const PG={dash,appts,pay:()=>pckHTML(),resched:()=>rsqHTML(),cust,bill};
 
