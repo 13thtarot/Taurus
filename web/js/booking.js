@@ -52,7 +52,7 @@ export async function payDeposit(appointmentId) {
 
 export async function myAppointments() {
   return must(await sb.from("appointments")
-    .select("*, appointment_items(*), payments(id,kind,status,amount,method,provider,paid_at), sales(id,receipt_no,total,balance_due,status,paid_at)")
+    .select("*, appointment_items(*), payments(id,kind,status,amount,method,provider,paid_at), sales(id,receipt_no,total,balance_due,status,paid_at), reschedule_requests(id,status,new_start,new_end,new_tech,reason,created_at)")
     .order("start_at", { ascending: false }));
 }
 
@@ -63,6 +63,9 @@ export const rescheduleMyBooking = async (id, date, startMin, techId) =>
 /** Timeline of what happened to one of the customer's bookings. */
 export const myAppointmentHistory = async (id) =>
   must(await sb.from("appointment_history").select("action, created_at").eq("appointment_id", id).order("created_at"));
+
+/** Withdraw a reschedule request that the salon has not answered yet. */
+export const cancelMyReschedule = async (requestId) => must(await sb.rpc("cancel_my_reschedule", { p_req: requestId }));
 
 export const cancelMyBooking = async (id) => must(await sb.rpc("cancel_my_booking", { p_appt: id }));
 

@@ -32,7 +32,8 @@
     payBalanceOnline: "Taking you to secure payment…",
     myAppointments: "Loading your appointments…",
     cancelMyBooking: "Cancelling your appointment…",
-    rescheduleMyBooking: "Moving your appointment…",
+    rescheduleMyBooking: "Sending your request…",
+    cancelMyReschedule: "Withdrawing your request…",
     myAppointmentHistory: "Loading details…",
     signIn: "Signing you in…",
     signUp: "Creating your account…",
@@ -88,7 +89,9 @@
     receiptUrl: "Opening receipt…",
     pendingReceipts: "Loading payments to check…",
     reviewPayment: "Saving your decision…",
-    savePaymentQr: "Uploading QR code…"
+    savePaymentQr: "Uploading QR code…",
+    pendingReschedules: "Loading reschedule requests…",
+    reviewReschedule: "Saving your decision…"
   };
   // Calls that end in a full-page redirect: keep the screen up instead of flashing the old page.
   var STICKY = { payDeposit: 1, payBalanceOnline: 1 };

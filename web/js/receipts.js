@@ -50,3 +50,17 @@ export async function savePaymentQr(file) {
   return must(await sb.from("business_settings").update({ pay_qr_path: path }).eq("id", true).select().single());
 }
 export const qrUrl = (path) => (path ? sb.storage.from("salon-gallery").getPublicUrl(path).data.publicUrl : "");
+
+/* ---------- reschedule requests (customers ask, staff / owner decide) ---------- */
+
+/** Staff: pending reschedule requests for bookings that are still active, oldest first. */
+export async function pendingReschedules() {
+  const rows = must(await sb.from("reschedule_requests")
+    .select("id, created_at, old_start, old_end, old_tech, new_start, new_end, new_tech, appointments(id, code, customer_name, customer_phone, status, appointment_items(name))")
+    .eq("status", "pending").order("created_at"));
+  return rows.filter((r) => r.appointments && ["confirmed", "held"].includes(r.appointments.status));
+}
+
+/** Staff: approve (moves the booking after re-checking the slot) or decline with a reason the customer sees. */
+export const reviewReschedule = (requestId, approve, reason = "") =>
+  sb.rpc("staff_review_reschedule", { p_req: requestId, p_approve: approve, p_reason: reason }).then(must);

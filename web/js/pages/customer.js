@@ -892,12 +892,21 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           price: lo, estP: sale && sale.status === "paid" ? php(sale.total) : lo === hi ? php(lo) : php(lo) + " to " + php(hi),
           estD: durT(dur), notes: r.notes || "", startISO: r.start_at,
           paid: (r.payments || []).filter((x) => ["paid", "partially_refunded"].includes(x.status)).reduce((t, x) => t + +x.amount, 0),
+          req: reqOf(r),
           sent: (r.payments || []).filter((x) => x.provider === "manual" && x.status === "pending").reduce((t, x) => t + +x.amount, 0),
           status: r.status === "held" ? (receiptSent(r) ? "verifying" : "pending") : r.status, exp: r.status === "held" && !receiptSent(r) ? r.hold_expires_at : null, staff: r.technician_id || 0, hist: [],
         };
       }
       // A held booking whose receipt is with staff: pending manual payment (or the old marker, an empty/endless expiry).
       const receiptSent = (r) => (r.payments || []).some((p) => p.provider === "manual" && p.status === "pending") || !r.hold_expires_at || r.hold_expires_at === "infinity";
+      // The customer's latest reschedule request for a booking (pending, or the latest declined one to explain it).
+      function reqOf(r) {
+        const L = [...(r.reschedule_requests || [])].sort((x, y) => String(y.created_at).localeCompare(String(x.created_at)));
+        const q = L[0];
+        if (!q || !["pending", "declined"].includes(q.status)) return null;
+        const p = Object.fromEntries(manila.formatToParts(new Date(q.new_start)).map((x) => [x.type, x.value]));
+        return { id: q.id, status: q.status, reason: q.reason || "", tech: q.new_tech || 0, date: `${p.year}-${p.month}-${p.day}`, start: +p.hour * 60 + +p.minute };
+      }
       async function loadAppts(quiet) {
         if (!U) { DB.appts = []; return; }
         DB.appts = (await (quiet ? FN.raw || FN : FN).myAppointments()).map(mapAppt);
@@ -1094,16 +1103,22 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         PAY.busy = false; render();
       }
       /* ---------- My Appointments: details, reschedule ---------- */
-      const canMove = (a) => ["confirmed", "verifying"].includes(a.status) && new Date(a.startISO) - Date.now() > 2 * 36e5;
+      const canMove = (a) => ["confirmed", "verifying"].includes(a.status) && new Date(a.startISO) - Date.now() > 2 * 36e5 && !(a.req && a.req.status === "pending");
+      const reqWhen = (q) => bfl(q.date) + " at " + m2t(q.start) + (q.tech ? " with " + te(q.tech) : "");
       function apptActs(a) {
         const b = [];
         if (a.status === "pending") b.push(`<button class="btn sm" onclick="payHold('${a.id}')">Pay &amp; upload receipt</button>`);
         b.push(`<button class="btn sm w" onclick="apptDetails('${a.id}')">View details</button>`);
         if (canMove(a)) b.push(`<button class="btn sm w" onclick="openResched('${a.id}')">Reschedule</button>`);
+        const live = a.req && ["confirmed", "verifying"].includes(a.status);
+        if (live && a.req.status === "pending") b.push(`<button class="btn sm w" onclick="askWithdraw('${a.id}')">Withdraw request</button>`);
         if (["pending", "confirmed"].includes(a.status)) b.push(`<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`);
+        const rq = !live ? "" : a.req.status === "pending"
+          ? `<div class="msg ok" style="margin:.5rem 0 0">Reschedule requested: <b>${esc(reqWhen(a.req))}</b>. Waiting for the salon to approve. Your current time stays booked until then.</div>`
+          : `<div class="msg" style="margin:.5rem 0 0">Your request to move to ${esc(reqWhen(a.req))} was declined${a.req.reason ? ": " + esc(a.req.reason) : ""}. Your original time is kept.</div>`;
         const note = a.status === "pending" ? "<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>"
           : a.status === "verifying" ? "<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>" : "";
-        return `<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
+        return `${rq}<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
       }
       async function apptDetails(id) {
         const a = DB.appts.find((x) => x.id === id);
@@ -1112,7 +1127,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         try { H = await FN.myAppointmentHistory(id); } catch (e) { /* details still show without the timeline */ }
         const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : "");
         const when = (iso) => new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        modal(`<h3>Appointment details</h3><p style="margin-top:0">${pill(a.status)}</p><dl class="sumlist">${row("Booking number", "<b>" + esc(a.code) + "</b>")}${row("Services", esc(a.svc))}${row("Date & time", bfl(a.date) + " at " + m2t(a.start) + " to " + m2t(a.start + a.dur))}${row("Duration", a.estD)}${row("Technician", a.staff ? esc(te(a.staff)) : "Any available technician")}${row(a.status === "completed" ? "Total" : "Estimated price", a.estP || php(a.price))}${row("Paid", a.paid ? php(a.paid) : "")}${row("Waiting to be checked", a.sent ? php(a.sent) : "")}${row("Notes", esc(a.notes))}</dl>${H.length ? `<h3 style="font-size:1rem;margin:1rem 0 .3rem">History</h3>${H.map((h) => `<div style="border-top:1px solid var(--line);padding:.4rem 0"><small class="mute">${when(h.created_at)}</small><br>${esc(h.action)}</div>`).join("")}` : ""}${MF(`${canMove(a) ? `<button class="btn w" onclick="modal();openResched('${a.id}')">Reschedule</button>` : ""}<button class="btn" onclick="modal()">Close</button>`)}`);
+        modal(`<h3>Appointment details</h3><p style="margin-top:0">${pill(a.status)}</p><dl class="sumlist">${row("Booking number", "<b>" + esc(a.code) + "</b>")}${row("Services", esc(a.svc))}${row("Date & time", bfl(a.date) + " at " + m2t(a.start) + " to " + m2t(a.start + a.dur))}${row("Duration", a.estD)}${row("Technician", a.staff ? esc(te(a.staff)) : "Any available technician")}${row(a.status === "completed" ? "Total" : "Estimated price", a.estP || php(a.price))}${row("Paid", a.paid ? php(a.paid) : "")}${a.req && a.req.status === "pending" ? row("Requested new time", esc(reqWhen(a.req)) + " <small>(waiting for approval)</small>") : ""}${row("Waiting to be checked", a.sent ? php(a.sent) : "")}${row("Notes", esc(a.notes))}</dl>${H.length ? `<h3 style="font-size:1rem;margin:1rem 0 .3rem">History</h3>${H.map((h) => `<div style="border-top:1px solid var(--line);padding:.4rem 0"><small class="mute">${when(h.created_at)}</small><br>${esc(h.action)}</div>`).join("")}` : ""}${MF(`${canMove(a) ? `<button class="btn w" onclick="modal();openResched('${a.id}')">Reschedule</button>` : ""}<button class="btn" onclick="modal()">Close</button>`)}`);
       }
       let RSC = null; // reschedule in progress: { id, tech, date, slot, ds, warn }
       function openResched(id) {
@@ -1131,19 +1146,19 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         return W(`<h2>Reschedule appointment</h2><div class="card"><small>Current booking · ${esc(a.code)}</small><br><b>${esc(a.svc)}</b><br><small>${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small></div>
 <label for="rs_t">Technician</label><select id="rs_t" onchange="RSC.tech=+this.value;RSC.slot=null;RSC.warn='';render()"><option value="0">Any available technician</option>${TE.map((t) => `<option value="${t.id}" ${RSC.tech === t.id ? "selected" : ""}>${esc(t.n)} · ${esc(t.sp)}</option>`).join("")}</select>
 <h3 style="margin:1rem 0 .3rem">Pick a new date and time</h3><div class="row" style="margin-top:.6rem"><button class="btn sm w" ${RSC.ds ? "" : "disabled"} onclick="RSC.ds--;render()" aria-label="Previous week">‹</button><b>${bfl(fmt(days[0]))} to ${bfl(fmt(days[6]))}</b><button class="btn sm w" ${RSC.ds >= 7 ? "disabled" : ""} onclick="RSC.ds++;render()" aria-label="Next week">›</button></div><div class="dstrip">${days.map((d) => { const iso = fmt(d); return `<button class="chip ${RSC.date === iso ? "on" : ""}" ${free(iso, a.dur, 0, RSC.tech).length ? "" : "disabled"} onclick="RSC.date='${iso}';RSC.slot=null;RSC.warn='';render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b></button>`; }).join("")}</div>${RSC.warn ? `<div class="msg">${esc(RSC.warn)}</div>` : ""}${RSC.date ? grp.map(([n, fn]) => { const L = f.filter(fn); return L.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .2rem">${n}</h3><div class="chips" style="margin-top:0">${L.map((t) => `<button class="chip ${RSC.slot === t ? "on" : ""}" onclick="RSC.slot=${t};RSC.warn='';render()">${m2t(t)}</button>`).join("")}</div>` : ""; }).join("") || '<div class="msg">No times left that day. Pick another day.</div>' : '<p class="mute">Pick a day to see the available times.</p>'}
-<p class="mute">Your payment and booking number stay the same.</p><p class="row" style="justify-content:flex-start;gap:.6rem"><button class="btn w" onclick="RSC=null;render()">Back</button><button class="btn" ${RSC.slot == null ? 'disabled style="opacity:.4"' : ""} onclick="askResched()">Confirm new time</button></p>`, 720);
+<p class="mute">The salon will review your request. Your current time stays booked until they approve it, and your payment and booking number stay the same.</p><p class="row" style="justify-content:flex-start;gap:.6rem"><button class="btn w" onclick="RSC=null;render()">Back</button><button class="btn" ${RSC.slot == null ? 'disabled style="opacity:.4"' : ""} onclick="askResched()">Request new time</button></p>`, 720);
       }
       function askResched() {
         const a = DB.appts.find((x) => x.id === RSC.id);
         if (!a || RSC.slot == null) return;
-        modal(`<h3>Move your appointment?</h3><dl class="sumlist"><dt>From</dt><dd>${bfl(a.date)} at ${m2t(a.start)}</dd><dt>To</dt><dd><b>${bfl(RSC.date)} at ${m2t(RSC.slot)}</b></dd><dt>Technician</dt><dd>${RSC.tech ? esc(te(RSC.tech)) : "Any available technician"}</dd></dl>${MF(`<button class="btn w" onclick="modal()">Back</button><button class="btn" onclick="doResched()">Move appointment</button>`)}`);
+        modal(`<h3>Request this new time?</h3><dl class="sumlist"><dt>From</dt><dd>${bfl(a.date)} at ${m2t(a.start)}</dd><dt>To</dt><dd><b>${bfl(RSC.date)} at ${m2t(RSC.slot)}</b></dd><dt>Technician</dt><dd>${RSC.tech ? esc(te(RSC.tech)) : "Any available technician"}</dd></dl>${MF(`<button class="btn w" onclick="modal()">Back</button><button class="btn" onclick="doResched()">Send request</button>`)}`);
       }
       async function doResched() {
         modal();
         try {
           await FN.rescheduleMyBooking(RSC.id, RSC.date, RSC.slot, RSC.tech);
           clearSlots(); await loadAppts(); RSC = null; render(); scrollTo(0, 0);
-          modal(`<h3>Appointment moved</h3><p>Your appointment has been moved. You can see the new date and time in My Appointments.</p>${MF('<button class="btn" onclick="modal()">OK</button>')}`);
+          modal(`<h3>Request sent</h3><p>The salon will review your request. Your current appointment stays booked until they approve the new time, and you'll see the update in My Appointments.</p>${MF('<button class="btn" onclick="modal()">OK</button>')}`);
         } catch (e) {
           clearSlots();
           if (RSC) { RSC.slot = null; RSC.warn = e.message || "Something went wrong. Please try again."; }
@@ -1151,7 +1166,19 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         }
       }
       const askCancel = (id) =>
-        modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="cancelBk('${id}')">Cancel</button>`)}`);
+        modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="askCancel2('${id}')">Cancel</button>`)}`);
+      // Second check so a booking is never cancelled by a stray tap.
+      function askCancel2(id) {
+        const a = DB.appts.find((x) => x.id === id);
+        modal(`<h3>Are you sure?</h3><p>This will cancel your appointment${a ? ` for <b>${esc(a.svc)}</b> on <b>${bfl(a.date)} at ${m2t(a.start)}</b>` : ""}. Your time slot will be released and this can't be undone.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="cancelBk('${id}')">Cancel appointment</button>`)}`);
+      }
+      const askWithdraw = (id) =>
+        modal(`<h3>Withdraw your reschedule request?</h3><p>Your appointment will stay at its current time.</p>${MF(`<button class="btn w" onclick="modal()">Keep request</button><button class="btn" onclick="doWithdraw('${id}')">Withdraw request</button>`)}`);
+      async function doWithdraw(id) {
+        const a = DB.appts.find((x) => x.id === id);
+        try { if (a && a.req) await FN.cancelMyReschedule(a.req.id); clearSlots(); await loadAppts(); modal(); render(); }
+        catch (e) { modal(`<h3>Could not withdraw</h3><p>${esc(e.message)}</p>${MF('<button class="btn w" onclick="modal()">Close</button>')}`); }
+      }
       async function cancelBk(id) {
         try { await FN.cancelMyBooking(id); await loadAppts(); modal(); render(); }
         catch (e) { modal(`<h3>Could not cancel</h3><p>${esc(e.message)}</p>${MF('<button class="btn w" onclick="modal()">Close</button>')}`); }

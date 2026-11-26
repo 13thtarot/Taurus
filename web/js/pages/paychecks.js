@@ -82,3 +82,78 @@ function pckErr(e) {
   if (/FORBIDDEN/.test(m)) return "Your account can't approve payments.";
   return m || "Something went wrong.";
 }
+
+/* ---------- "Reschedule requests": customers ask to move a booking; staff approve or decline ---------- */
+var RSQ = { list: [], loaded: false, loading: false, err: "" };
+
+function rsqTech(id) {
+  if (!id) return "Any available technician";
+  var L = (typeof TE !== "undefined" && TE && TE.length) ? TE : (typeof DB !== "undefined" && DB.TE) || [];
+  var t = L.find(function (x) { return x.id === id; });
+  return t ? t.n : "Technician #" + id;
+}
+function rsqSpan(a, b, tech) {
+  var t = function (iso) { return new Date(iso).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }); };
+  var d = new Date(a).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", weekday: "short", month: "short", day: "numeric" });
+  return "<b>" + d + "</b>, " + t(a) + " to " + t(b) + "<br><small>" + esc(rsqTech(tech)) + "</small>";
+}
+
+async function rsqLoad(quiet) {
+  if (RSQ.loading) return;
+  RSQ.loading = true;
+  try { RSQ.list = await (quiet ? FN.raw || FN : FN).pendingReschedules(); RSQ.err = ""; }
+  catch (e) { RSQ.err = (e && e.message) || "Could not load reschedule requests."; }
+  RSQ.loaded = true; RSQ.loading = false;
+}
+
+function rsqHTML() {
+  if (!RSQ.loaded) { rsqLoad().then(render); return '<p class="mute">Loading reschedule requests…</p>'; }
+  var head = '<div class="row" style="justify-content:space-between;margin-bottom:.8rem"><p class="mute" style="margin:0">Customers asked to move these bookings. The requested time is held until you decide. Check the technician and the day\'s schedule, then approve or decline.</p><button class="btn w" onclick="rsqLoad().then(render)">Refresh</button></div>';
+  if (RSQ.err) return head + '<div class="msg">' + esc(RSQ.err) + '</div>';
+  if (!RSQ.list.length) return head + '<div class="card"><p class="mute" style="margin:0">No reschedule requests waiting.</p></div>';
+  var rows = RSQ.list.map(function (r) {
+    var a = r.appointments, svc = (a.appointment_items || []).map(function (i) { return i.name; }).join(", ");
+    return '<tr><td>' + esc(a.customer_name) + '<br><small>' + esc(a.code) + ' · ' + esc(a.customer_phone || "") + '</small></td>' +
+      '<td>' + esc(svc) + '</td>' +
+      '<td>' + rsqSpan(r.old_start, r.old_end, r.old_tech) + '</td>' +
+      '<td>' + rsqSpan(r.new_start, r.new_end, r.new_tech) + '</td>' +
+      '<td><small>' + pckAgo(r.created_at) + '</small></td>' +
+      '<td class="row" style="flex-wrap:nowrap"><button class="btn w sm" onclick="rsqDecline(\'' + r.id + '\')">Decline</button><button class="btn sm" onclick="rsqApprove(\'' + r.id + '\')">Approve</button></td></tr>';
+  }).join("");
+  return head + '<div class="card"><div class="tbl"><table><tr><th>Customer</th><th>Services</th><th>Current time</th><th>Requested time</th><th>Sent</th><th></th></tr>' + rows + '</table></div></div>';
+}
+
+function rsqApprove(id) {
+  var r = RSQ.list.find(function (x) { return x.id === id; });
+  if (!r) return;
+  modal('<h3>Approve this reschedule?</h3><p>' + esc(r.appointments.customer_name) + ' · ' + esc(r.appointments.code) + '</p>' +
+    '<dl class="sumlist"><dt>From</dt><dd>' + rsqSpan(r.old_start, r.old_end, r.old_tech) + '</dd><dt>To</dt><dd>' + rsqSpan(r.new_start, r.new_end, r.new_tech) + '</dd></dl>' +
+    '<p class="mute">The booking moves to the new time and the customer is notified.</p>' +
+    MF('<button class="btn w" onclick="modal()">Back</button><button class="btn" onclick="rsqApproveGo(\'' + id + '\')">Approve</button>'));
+}
+async function rsqApproveGo(id) {
+  try { await FN.reviewReschedule(id, true); modal(); toast("Reschedule approved. The booking has been moved."); }
+  catch (e) { modal(); toast(rsqErr(e)); }
+  await rsqLoad(true); render();
+}
+
+function rsqDecline(id) {
+  modal('<h3>Decline this reschedule?</h3><p class="mute">The booking keeps its current time and the customer will see your reason.</p>' +
+    '<label for="rsq_r_pick">Reason</label><select id="rsq_r_pick" onchange="document.getElementById(\'rsq_r\').value=this.value"><option value="">Choose a reason…</option><option>That time is no longer available</option><option>The technician is not available then</option><option>Too close to the appointment time</option><option>Please call the salon to arrange a new time</option></select>' +
+    '<input id="rsq_r" placeholder="Or type your own reason" maxlength="200">' +
+    MF('<button class="btn w" onclick="modal()">Back</button><button class="btn" onclick="rsqDeclineGo(\'' + id + '\')">Decline request</button>'));
+}
+async function rsqDeclineGo(id) {
+  var reason = (document.getElementById("rsq_r").value || "").trim();
+  if (reason.length < 3) return toast("Enter a reason for the customer.");
+  try { await FN.reviewReschedule(id, false, reason); modal(); toast("Request declined. The customer has been told."); }
+  catch (e) { modal(); toast(rsqErr(e)); }
+  await rsqLoad(true); render();
+}
+function rsqErr(e) {
+  var m = String((e && e.message) || "");
+  if (/SLOT_UNAVAILABLE|just taken/i.test(m)) return "That time is no longer free. Decline the request so the customer can pick another time.";
+  if (/ALREADY_REVIEWED|already handled/i.test(m)) return "Someone already handled this request.";
+  if (/NOT_RESCHEDULABLE|no longer be rescheduled/i.test(m)) return "This booking can no longer be moved.";
+  return m || "Something went wrong.";
+}

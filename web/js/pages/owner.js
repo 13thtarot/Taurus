@@ -149,6 +149,7 @@
           ["dash", "Dashboard"],
           ["appts", "Appointments & Queue"],
           ["pay", "Payment checks"],
+          ["resched", "Reschedule requests"],
           ["cust", "Customer Records"],
           ["bill", "Billing & Payment"],
         ],
@@ -156,6 +157,7 @@
           ["dash", "Dashboard"],
           ["appts", "Appointments"],
           ["pay", "Payment checks"],
+          ["resched", "Reschedule requests"],
           ["cust", "Customer Records"],
           ["tx", "Transactions"],
           ["rep", "Reports & Analytics"],
@@ -684,6 +686,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         dash: odash,
         appts: oappts,
         pay: () => pckHTML(),
+        resched: () => rsqHTML(),
         cust: ocust,
         tx: otx,
         rep: orep,
@@ -789,7 +792,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         await Promise.all([loadCatalogData(), loadAppts(), loadStaff(), loadRefunds(), loadGal()]);
         if (unwatch) unwatch();
         unwatch = FN.watchOwnerBoard(async () => {
-          await Promise.all([loadAppts(true), loadRefunds(true), P === "pay" ? pckLoad(true) : null]); // background refresh: no loading screen
+          await Promise.all([loadAppts(true), loadRefunds(true), P === "pay" ? pckLoad(true) : null, P === "resched" ? rsqLoad(true) : null]); // background refresh: no loading screen
           FINK = "";
           if (P === "rep") { try { const k = RG.f + "|" + RG.t; FIN = await (FN.raw || FN).dashboard(RG.f, RG.t); FINK = k; } catch (e) {} }
           if (OW && !$("#md").innerHTML && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) render();
