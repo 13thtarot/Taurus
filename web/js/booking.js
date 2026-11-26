@@ -52,7 +52,7 @@ export async function payDeposit(appointmentId) {
 
 export async function myAppointments() {
   return must(await sb.from("appointments")
-    .select("*, appointment_items(*), payments(id,kind,status,amount,method,paid_at), sales(id,receipt_no,total,balance_due,status,paid_at)")
+    .select("*, appointment_items(*), payments(id,kind,status,amount,method,provider,paid_at), sales(id,receipt_no,total,balance_due,status,paid_at)")
     .order("start_at", { ascending: false }));
 }
 

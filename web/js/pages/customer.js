@@ -904,9 +904,11 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           svc: it.map((i) => i.name).join(", "),
           date: `${p.year}-${p.month}-${p.day}`, start: +p.hour * 60 + +p.minute, dur,
           price: lo, estP: sale && sale.status === "paid" ? php(sale.total) : lo === hi ? php(lo) : php(lo) + " to " + php(hi),
-          estD: durT(dur), status: r.status === "held" ? (r.hold_expires_at ? "pending" : "verifying") : r.status, exp: r.hold_expires_at, staff: r.technician_id || 0, hist: [],
+          estD: durT(dur), status: r.status === "held" ? (receiptSent(r) ? "verifying" : "pending") : r.status, exp: r.status === "held" && !receiptSent(r) ? r.hold_expires_at : null, staff: r.technician_id || 0, hist: [],
         };
       }
+      // A held booking whose receipt is with staff: pending manual payment (or the old marker, an empty/endless expiry).
+      const receiptSent = (r) => (r.payments || []).some((p) => p.provider === "manual" && p.status === "pending") || !r.hold_expires_at || r.hold_expires_at === "infinity";
       async function loadAppts(quiet) {
         if (!U) { DB.appts = []; return; }
         DB.appts = (await (quiet ? FN.raw || FN : FN).myAppointments()).map(mapAppt);
