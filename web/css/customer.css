@@ -347,6 +347,24 @@
         margin-bottom: 0.6rem;
         cursor: pointer;
       }
+      .opt.best {
+        border-color: var(--gold, #c9a86a);
+        background: linear-gradient(135deg, rgba(201,168,106,.14), transparent 70%), var(--card);
+      }
+      .bestTag {
+        display: inline-block;
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        color: #1d1a12;
+        background: var(--gold, #c9a86a);
+        border-radius: 999px;
+        padding: .1rem .55rem;
+        margin-bottom: .3rem;
+      }
+      .bestWhy {
+        color: var(--gold, #c9a86a);
+      }
       .opt.on {
         border-color: var(--deep);
         box-shadow: 0 0 0 2px var(--deep);

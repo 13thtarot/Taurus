@@ -489,6 +489,16 @@ ${fams.map(([name, test, blurb]) => {
           480,
         );
       /* booking */
+      // Topics a service or a technician's specialty covers, used to recommend technicians.
+      const TOPIC = { gel: /gel|biab/i, ext: /extension|biab|polygel|enhancement/i, pedi: /pedi/i, mani: /mani/i, spa: /spa|massage|paraffin|relax/i, art: /\bart\b|design|chrome|ombre|french|rhinestone|charm|sticker|decal|flower|floral|character|glitter|portrait|3d/i, basic: /basic|classic|regular|kids|cleaning/i, removal: /removal/i };
+      const TW = { ext: 2, spa: 2, art: 2, removal: 2 }; // specialist skills count more than general ones
+      const topics = (txt) => Object.keys(TOPIC).filter((k) => TOPIC[k].test(txt));
+      function techFit(t, svcs) {
+        const tt = topics(t.sp || "");
+        let n = 0; const names = [];
+        for (const s of svcs) { const hit = topics(s.n + " " + (s.g || "")).filter((k) => tt.includes(k)).reduce((x, k) => x + (TW[k] || 1), 0); if (hit) { n += hit; names.push(s.n); } }
+        return { n, names };
+      }
       const sel = () => DB.SV.filter((s) => (B.sel || []).includes(s.id)),
         sm = (k, k2) =>
           sel().reduce((t, s) => t + (k2 ? s[k2] || s[k] : s[k]), 0);
@@ -589,10 +599,14 @@ ${fams.map(([name, test, blurb]) => {
             )}</div>${sel().some((s) => /Add-Ons/.test(s.g)) ? `<div class="msg ok">The final nail art price is confirmed after the salon reviews your reference design.</div><label>Reference photo (optional)</label><input type="file" accept="image/*" onchange="B.refFile=this.files[0]||null;B.ref=this.files[0]?this.files[0].name:'';render()">${B.ref ? `<small>Selected: ${esc(B.ref)}</small>` : ""}` : ""}`;
         }
         if (k === "tech") {
-          const L = tm
-            ? TE.filter((t) => free(B.date, dmax(), 0, t.id).includes(B.slot))
-            : TE;
-          h = `<h3>${tm ? "Technicians available at " + m2t(B.slot) : "Choose a technician"}</h3><div class="sg"><button class="opt ${!B.tech ? "on" : ""}" onclick="pickT(0)"><span><b>Any available technician</b><br><small>We will assign the best fit</small></span></button>${L.map((t) => `<button class="opt ${B.tech === t.id ? "on" : ""}" onclick="pickT(${t.id})"><span><b>${esc(t.n)}</b><br><small>${esc(t.sp)}${tm ? "" : " · day off " + DN[t.off]}</small></span></button>`).join("")}</div>`;
+          const L0 = tm ? TE.filter((t) => free(B.date, dmax(), 0, t.id).includes(B.slot)) : TE;
+          // Rank technicians by how many of the chosen services match their specialty; the top ones are highlighted.
+          const picked = sel(), sc = Object.fromEntries(L0.map((t) => [t.id, techFit(t, picked)]));
+          const top = Math.max(0, ...Object.values(sc).map((x) => x.n));
+          const L = [...L0].sort((x, y) => sc[y.id].n - sc[x.id].n);
+          const best = L.filter((t) => top > 0 && sc[t.id].n === top), good = L.filter((t) => !best.includes(t) && sc[t.id].n > 0), rest = L.filter((t) => !sc[t.id].n);
+          const card = (t, b) => `<button class="opt ${B.tech === t.id ? "on" : ""}${b === 2 ? " best" : ""}" onclick="pickT(${t.id})"><span>${b === 2 ? '<span class="bestTag">★ Best match</span><br>' : ""}<b>${esc(t.n)}</b><br><small>${esc(t.sp)}${tm ? "" : " · day off " + DN[t.off]}</small>${b ? `<br><small class="bestWhy">${b === 2 ? "Great" : "Good"} for ${esc(sc[t.id].names.join(", "))}</small>` : ""}</span></button>`;
+          h = `<h3>${tm ? "Technicians available at " + m2t(B.slot) : "Choose a technician"}</h3>${best.length ? `<p class="mute" style="margin:.2rem 0 .6rem">Recommended for your services</p><div class="sg">${best.map((t) => card(t, 2)).join("")}</div>${good.length ? `<h3 style="font-size:1rem;margin:1.1rem 0 .4rem">Also a good fit</h3><div class="sg">${good.map((t) => card(t, 1)).join("")}</div>` : ""}<h3 style="font-size:1rem;margin:1.1rem 0 .4rem">Other technicians</h3>` : ""}<div class="sg"><button class="opt ${!B.tech ? "on" : ""}" onclick="pickT(0)"><span><b>Any available technician</b><br><small>We will assign the best fit</small></span></button>${(best.length ? rest : L).map((t) => card(t, 0)).join("")}</div>`;
         }
         if (k === "time") {
           ok = B.slot != null;
