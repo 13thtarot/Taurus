@@ -556,6 +556,16 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         } catch (e) { fail(e); }
         render();
       }
+      function askDone(id) {
+        const a = DB.appts.find((x) => x.id === id);
+        modal(`<h3>Mark as completed?</h3><p>${a ? esc(a.name) + " · " + esc(a.svc) : ""}</p><p class="mute">Do this once the customer's service is finished. The bill is already paid.</p>${MF(`<button class="btn w" onclick="modal()">Not yet</button><button class="btn" onclick="doneGo('${id}')">Mark as completed</button>`)}`);
+      }
+      async function doneGo(id) {
+        modal();
+        try { await FN.completeAppointment(id); toast("Appointment completed"); await loadAppts(); }
+        catch (e) { fail(e); }
+        render();
+      }
       function oappts() {
         let L = [...DB.appts];
         const q = F.q.toLowerCase();
@@ -580,7 +590,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         )
           .map(
             (a) =>
-              `<tr><td>${a.date}<br><small>${m2t(a.start)}</small></td><td>${esc(a.name)}</td><td>${a.svc}</td><td>${te(a.staff)}</td><td>${a.station || "-"}</td><td>${pill(a.status)}</td><td><button class="btn sm w" onclick="showH('${a.id}')">History</button></td></tr>`,
+              `<tr><td>${a.date}<br><small>${m2t(a.start)}</small></td><td>${esc(a.name)}</td><td>${a.svc}</td><td>${te(a.staff)}</td><td>${a.station || "-"}</td><td>${pill(a.status)}${a.status === "service" && a.saleStatus === "paid" ? ' <span class="pill completed">Paid</span>' : ""}</td><td class="row" style="flex-wrap:nowrap">${a.status === "service" && a.saleStatus === "paid" ? `<button class="btn sm" onclick="askDone('${a.id}')">Mark as completed</button>` : ""}<button class="btn sm w" onclick="showH('${a.id}')">History</button></td></tr>`,
           )
           .join(
             "",
@@ -588,7 +598,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
       }
       function otx() {
         const L = DB.appts
-          .filter((a) => ["completed", "refunded", "voided"].includes(a.status) && a.total != null)
+          .filter((a) => a.total != null && (["completed", "refunded", "voided"].includes(a.status) || ["paid", "partially_refunded", "refunded"].includes(a.saleStatus)))
           .sort((a, b) => key(b).localeCompare(key(a)))
           .slice(0, 300);
         const pend = REF.length
@@ -746,7 +756,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
           date: `${p.year}-${p.month}-${p.day}`, start: +p.hour * 60 + +p.minute, dur,
           price: lo, sub: sale ? +sale.subtotal : undefined, total: sale ? +sale.total : undefined,
           status: r.status === "held" ? "pending" : r.status, staff: r.technician_id || 0, station: r.station_id || 0,
-          lines, rno: sale ? sale.receipt_no : "", saleId: sale ? sale.id : null,
+          lines, rno: sale ? sale.receipt_no : "", saleId: sale ? sale.id : null, saleStatus: sale ? sale.status : "",
           method: [...new Set(paid.map((x) => x.method))].join(", "), by: sale && names[sale.created_by] ? names[sale.created_by] : "",
           pays: r.payments || [], hist: [], walkin: r.is_walkin,
         };

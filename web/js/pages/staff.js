@@ -7,7 +7,7 @@ today=()=>{const p=parts(Date.now());return `${p.year}-${p.month}-${p.day}`},
 hm=iso=>{const p=parts(iso);return `${p.hour}:${p.minute}`};
 const LB={confirmed:"Confirmed",waiting:"Waiting",service:"In service",completed:"Completed",cancelled:"Cancelled",noshow:"No-show",held:"Pending",refunded:"Refunded",voided:"Voided",expired:"Expired"},
 pill=s=>`<span class="pill ${s==="held"?"waiting":s}">${LB[s]||esc(s)}</span>`,
-ERR={STATUS_LOCKED:"This appointment can no longer be changed.",ASSIGN_TECHNICIAN_FIRST:"Assign a technician first.",TECH_OR_STATION_BUSY:"That technician or station is busy at that time.",NOT_BILLABLE:"This appointment can't be billed.",INVOICE_LOCKED:"This invoice already has a payment, so it can't be edited.",PRICE_OUT_OF_RANGE:"That price is outside the service's price range.",NAME_REQUIRED:"Enter the customer's name.",NO_LINES:"Add at least one service.",TECHNICIAN_REQUIRED:"Pick a technician for every line.",INVALID_METHOD:"Pick a payment method.",FORBIDDEN:"This account isn't allowed to do that."},
+ERR={NOT_IN_SERVICE:"Only appointments that are in service can be marked as completed.",BILL_FIRST:"Create the bill and collect payment first.",BALANCE_DUE:"Collect the remaining balance first.",STATUS_LOCKED:"This appointment can no longer be changed.",ASSIGN_TECHNICIAN_FIRST:"Assign a technician first.",TECH_OR_STATION_BUSY:"That technician or station is busy at that time.",NOT_BILLABLE:"This appointment can't be billed.",INVOICE_LOCKED:"This invoice already has a payment, so it can't be edited.",PRICE_OUT_OF_RANGE:"That price is outside the service's price range.",NAME_REQUIRED:"Enter the customer's name.",NO_LINES:"Add at least one service.",TECHNICIAN_REQUIRED:"Pick a technician for every line.",INVALID_METHOD:"Pick a payment method.",FORBIDDEN:"This account isn't allowed to do that."},
 toast=m=>{const d=document.createElement("div");d.className="toast noprint";d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2800)},
 fail=e=>toast(ERR[String((e&&e.message)||"").trim()]||(e&&e.message)||"Something went wrong."),
 modal=h=>{document.body.classList.remove("rcp");$("#md").innerHTML=h?`<div class="mb" onclick="if(event.target===this)modal()"><div class="mc">${h}</div></div>`:""},
@@ -68,7 +68,7 @@ function acts(a){
   const b=(l,s,c="")=>`<button class="btn w ${c}" onclick="setSt('${a.id}','${s}')">${l}</button>`;
   if(a.status==="confirmed")return b("Check in","waiting")+b("No-show","noshow")+b("Cancel","cancelled");
   if(a.status==="waiting")return b("Start","service")+b("Cancel","cancelled");
-  if(a.status==="service")return `<button class="btn" onclick="invoice('${a.id}')">Bill</button>`;
+  if(a.status==="service"){const s=sale(a);return s&&s.status==="paid"?`<span class="pill completed">Paid</span><button class="btn" onclick="askDone('${a.id}')">Mark as completed</button>`:`<button class="btn" onclick="invoice('${a.id}')">Bill</button>`}
   return "";
 }
 function appts(){
@@ -95,6 +95,7 @@ function bill(){
 const PG={dash,appts,pay:()=>pckHTML(),cust,bill};
 
 /* ---------- handlers ---------- */
+const askDone=id=>{const a=DB.appts.find(x=>x.id===id);modal(`<h3>Mark as completed?</h3><p>${a?esc(a.customer_name)+" · "+esc(svcs(a)):""}</p><p class="mute">Do this once the customer's service is finished. The bill is already paid.</p>${MF(`<button class="btn w" onclick="modal()">Not yet</button><button class="btn" onclick="modal();act(()=>FN.completeAppointment('${id}'),'Appointment completed')">Mark as completed</button>`)}`)};
 const setSt=(id,s)=>act(()=>FN.setStatus(id,s),s==="service"?"Service started":"Updated"),
 assign=(id,t,s)=>act(()=>FN.assign(id,t?+t:null,s?+s:null),"Updated"),
 act2=(fn,m)=>act(fn,m);

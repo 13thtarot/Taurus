@@ -40,6 +40,7 @@ export const setStaffActive = (userId, active) => sb.rpc("owner_set_staff_active
 export const renameProfile = (id, fullName) => sb.from("profiles").update({ full_name: fullName }).eq("id", id).then(must);
 
 // ---- data for the owner views
+export const completeAppointment = (id) => sb.rpc("staff_complete_appointment", { p_appt: id }).then(must);
 export async function ownerAppointments(fromISO, toISO) {
   const a = new Date(fromISO + "T00:00:00+08:00").toISOString();
   const b = new Date(toISO + "T23:59:59+08:00").toISOString();

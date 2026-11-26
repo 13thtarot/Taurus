@@ -17,6 +17,7 @@ export const customers = async (q = "") =>
 export const customerAppointments = async (customerId) =>
   must(await sb.from("appointments").select("*, appointment_items(name)").eq("customer_id", customerId).order("start_at", { ascending: false }));
 
+export const completeAppointment = (id) => sb.rpc("staff_complete_appointment", { p_appt: id }).then(must);
 export const setStatus = (id, status) => sb.rpc("staff_set_status", { p_appt: id, p_status: status }).then(must);
 export const assign = (id, techId, stationId) => sb.rpc("staff_assign", { p_appt: id, p_tech: techId || null, p_station: stationId || null }).then(must);
 

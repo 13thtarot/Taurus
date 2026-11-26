@@ -62,6 +62,7 @@
     customers: "Searching customers…",
     customerAppointments: "Loading history…",
     setStatus: "Updating appointment…",
+    completeAppointment: "Marking as completed…",
     assign: "Assigning technician…",
     addWalkin: "Adding walk-in…",
     checkinWalkin: "Checking in walk-in…",
