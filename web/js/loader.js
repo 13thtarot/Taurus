@@ -32,6 +32,8 @@
     payBalanceOnline: "Taking you to secure payment…",
     myAppointments: "Loading your appointments…",
     cancelMyBooking: "Cancelling your appointment…",
+    rescheduleMyBooking: "Moving your appointment…",
+    myAppointmentHistory: "Loading details…",
     signIn: "Signing you in…",
     signUp: "Creating your account…",
     signOut: "Signing you out…",

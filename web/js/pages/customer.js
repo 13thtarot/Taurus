@@ -531,16 +531,13 @@ ${fams.map(([name, test, blurb]) => {
           }),
         BLB = {
           svc: "Services",
-          method: "Method",
           tech: "Tech",
           time: "Time",
           review: "Review",
           confirm: "Confirm",
         };
-      const bord = () =>
-          B.method === "time"
-            ? ["svc", "method", "time", "tech", "review", "confirm"]
-            : ["svc", "method", "tech", "time", "review", "confirm"],
+      // Services -> technician (or "any available") -> time. Picking "any" covers the old "book by time" path.
+      const bord = () => ["svc", "tech", "time", "review", "confirm"],
         bidx = (k) => bord().indexOf(k);
       const bsum = () =>
         `<div class="card" style="position:sticky;top:90px"><b>Your booking</b>${
@@ -553,18 +550,10 @@ ${fams.map(([name, test, blurb]) => {
                 .join("")
             : '<p class="mute">No services selected yet.</p>'
         }${B.tech || bidx("tech") < B.step ? `<p style="margin:.7rem 0 0"><small>Technician</small><br><b>${B.tech ? esc(te(B.tech)) : "Any available technician"}</b></p>` : ""}${B.slot != null ? `<p style="margin:.5rem 0 0"><small>Date and time</small><br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p>` : ""}${sel().length ? `<div class="row" style="margin-top:.8rem"><small>Estimated duration</small><b>${dur()}</b></div><div class="row"><small>Estimated total</small><b class="pr">${prr()}</b></div>` : ""}<small>The salon confirms final nail art prices.</small></div>`;
-      const SVGP =
-          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
-        SVGC =
-          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
-      function setM(m) {
-        if (B.method !== m) {
-          B.tech = 0;
-          B.slot = null;
-          B.date = null;
-        }
-        B.method = m;
-        B.step = 2;
+      // Changing technician clears the chosen time, since each technician has different free slots.
+      function pickT(id) {
+        if ((B.tech || 0) !== id) { B.slot = null; B.warn = ""; }
+        B.tech = id;
         render();
       }
       function book() {
@@ -578,7 +567,7 @@ ${fams.map(([name, test, blurb]) => {
         }
         const o = bord(),
           k = o[B.step],
-          tm = B.method === "time",
+          tm = false,
           tid = tm ? 0 : B.tech || 0,
           rs = tm ? "B.tech=0;" : "";
         const prog = `<div class="stepper" role="list">${o.map((x, i) => `<div class="stp ${i < B.step ? "done" : i === B.step ? "cur" : ""}" role="listitem"><span class="dot">${i < B.step ? "✓" : i + 1}</span><small>${BLB[x]}</small></div>${i < o.length - 1 ? `<i class="ln ${i < B.step ? "done" : ""}"></i>` : ""}`).join("")}</div>`;
@@ -599,15 +588,11 @@ ${fams.map(([name, test, blurb]) => {
               "",
             )}</div>${sel().some((s) => /Add-Ons/.test(s.g)) ? `<div class="msg ok">The final nail art price is confirmed after the salon reviews your reference design.</div><label>Reference photo (optional)</label><input type="file" accept="image/*" onchange="B.refFile=this.files[0]||null;B.ref=this.files[0]?this.files[0].name:'';render()">${B.ref ? `<small>Selected: ${esc(B.ref)}</small>` : ""}` : ""}`;
         }
-        if (k === "method") {
-          cont = false;
-          h = `<p class="mute" style="text-align:center;letter-spacing:.1em;font-weight:600">HOW WOULD YOU LIKE TO BOOK?</p><button class="mth" onclick="setM('tech')"><span class="ic">${SVGP}</span><span style="flex:1"><b style="font-size:1.1rem">Book by Tech</b><br><small>Choose your preferred technician first</small></span><span>›</span></button><button class="mth" onclick="setM('time')"><span class="ic">${SVGC}</span><span style="flex:1"><b style="font-size:1.1rem">Book by Time</b><br><small>Choose an available time slot first</small></span><span>›</span></button>`;
-        }
         if (k === "tech") {
           const L = tm
             ? TE.filter((t) => free(B.date, dmax(), 0, t.id).includes(B.slot))
             : TE;
-          h = `<h3>${tm ? "Technicians available at " + m2t(B.slot) : "Choose a technician"}</h3><div class="sg"><button class="opt ${!B.tech ? "on" : ""}" onclick="B.tech=0;render()"><span><b>Any available technician</b><br><small>We will assign the best fit</small></span></button>${L.map((t) => `<button class="opt ${B.tech === t.id ? "on" : ""}" onclick="B.tech=${t.id};render()"><span><b>${esc(t.n)}</b><br><small>${esc(t.sp)}${tm ? "" : " · day off " + DN[t.off]}</small></span></button>`).join("")}</div>`;
+          h = `<h3>${tm ? "Technicians available at " + m2t(B.slot) : "Choose a technician"}</h3><div class="sg"><button class="opt ${!B.tech ? "on" : ""}" onclick="pickT(0)"><span><b>Any available technician</b><br><small>We will assign the best fit</small></span></button>${L.map((t) => `<button class="opt ${B.tech === t.id ? "on" : ""}" onclick="pickT(${t.id})"><span><b>${esc(t.n)}</b><br><small>${esc(t.sp)}${tm ? "" : " · day off " + DN[t.off]}</small></span></button>`).join("")}</div>`;
         }
         if (k === "time") {
           ok = B.slot != null;
@@ -715,6 +700,7 @@ ${fams.map(([name, test, blurb]) => {
       };
       function mine() {
         if (!U) return gate();
+        if (RSC) return reschedView();
         const L = DB.appts.filter((a) => a.uid === U.id),
           T = {
             Upcoming: L.filter((a) => ["pending", "verifying", "confirmed", "waiting", "service"].includes(a.status)),
@@ -727,7 +713,7 @@ ${fams.map(([name, test, blurb]) => {
         return W(
           `<h2>Hello, ${esc(U.name || U.user)}</h2><div class="card next"><small>Next appointment</small>${nx ? `<h3 style="margin:.3rem 0">${esc(nx.svc)}</h3><p style="margin:0">${bfl(nx.date)} at ${m2t(nx.start)} ${pill(nx.status)}<br><small>Confirmation ${esc(nx.code)}</small></p>` : '<p class="mute" style="margin:.3rem 0 0">You have no upcoming appointments.</p>'}</div><h2 style="margin-top:1.4rem">My Appointments</h2><div class="tabs">${Object.keys(T).map((t) => `<button class="${MT === t ? "on" : ""}" onclick="MT='${t}';MS='';render()">${t} (${T[t].length})</button>`).join("")}</div>
 <div class="sortbar"><label for="msort">Sort by</label><select id="msort" onchange="MS=this.value;render()">${Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}" ${k === sk ? "selected" : ""}>${l}</option>`).join("")}</select><small>${list.length} appointment${list.length === 1 ? "" : "s"}</small></div>
-${list.map((a) => `<div class="card appt">${dateBox(a)}<div class="appt-b"><div class="row"><b>${esc(a.svc)}</b>${pill(a.status)}</div><small>🕒 ${m2t(a.start)} to ${m2t(a.start + a.dur)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small><br><small>${a.estP || php(a.price)} · Confirmation <b>${esc(a.code)}</b></small>${MT === "Upcoming" && a.status !== "service" ? `<p style="margin:.5rem 0 0">${a.status === "pending" ? `<button class="btn sm" onclick="payHold('${a.id}')">Pay &amp; upload receipt</button> ` : ""}${a.status === "verifying" ? "" : `<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`}</p>${a.status === "pending" ? `<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>` : a.status === "verifying" ? `<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>` : ""}` : ""}</div></div>`).join("") || '<p class="mute">Nothing here yet.</p>'}`,
+${list.map((a) => `<div class="card appt">${dateBox(a)}<div class="appt-b"><div class="row"><b>${esc(a.svc)}</b>${pill(a.status)}</div><small>🕒 ${m2t(a.start)} to ${m2t(a.start + a.dur)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small><br><small>${a.estP || php(a.price)} · Confirmation <b>${esc(a.code)}</b></small>${apptActs(a)}</div></div>`).join("") || '<p class="mute">Nothing here yet.</p>'}`,
           720,
         );
       }
@@ -904,7 +890,10 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           svc: it.map((i) => i.name).join(", "),
           date: `${p.year}-${p.month}-${p.day}`, start: +p.hour * 60 + +p.minute, dur,
           price: lo, estP: sale && sale.status === "paid" ? php(sale.total) : lo === hi ? php(lo) : php(lo) + " to " + php(hi),
-          estD: durT(dur), status: r.status === "held" ? (receiptSent(r) ? "verifying" : "pending") : r.status, exp: r.status === "held" && !receiptSent(r) ? r.hold_expires_at : null, staff: r.technician_id || 0, hist: [],
+          estD: durT(dur), notes: r.notes || "", startISO: r.start_at,
+          paid: (r.payments || []).filter((x) => ["paid", "partially_refunded"].includes(x.status)).reduce((t, x) => t + +x.amount, 0),
+          sent: (r.payments || []).filter((x) => x.provider === "manual" && x.status === "pending").reduce((t, x) => t + +x.amount, 0),
+          status: r.status === "held" ? (receiptSent(r) ? "verifying" : "pending") : r.status, exp: r.status === "held" && !receiptSent(r) ? r.hold_expires_at : null, staff: r.technician_id || 0, hist: [],
         };
       }
       // A held booking whose receipt is with staff: pending manual payment (or the old marker, an empty/endless expiry).
@@ -1029,7 +1018,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (!U) return go("login");
         B.busy = true; B.err = ""; render();
         try {
-          const a = await FN.createHold({ serviceIds: [...B.sel], date: B.date, startMin: B.slot, techId: B.tech || 0, method: B.method, name: B.name, phone: B.phone, email: B.email, notes: B.notes });
+          const a = await FN.createHold({ serviceIds: [...B.sel], date: B.date, startMin: B.slot, techId: B.tech || 0, method: B.tech ? "tech" : "time", name: B.name, phone: B.phone, email: B.email, notes: B.notes });
           if (B.refFile) { try { await FN.uploadReference(B.refFile, a.id); } catch (x) { console.warn("reference upload failed", x); } }
           FN.resetAttempt(); clearSlots();
           await loadAppts();
@@ -1104,8 +1093,65 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         }
         PAY.busy = false; render();
       }
+      /* ---------- My Appointments: details, reschedule ---------- */
+      const canMove = (a) => ["confirmed", "verifying"].includes(a.status) && new Date(a.startISO) - Date.now() > 2 * 36e5;
+      function apptActs(a) {
+        const b = [];
+        if (a.status === "pending") b.push(`<button class="btn sm" onclick="payHold('${a.id}')">Pay &amp; upload receipt</button>`);
+        b.push(`<button class="btn sm w" onclick="apptDetails('${a.id}')">View details</button>`);
+        if (canMove(a)) b.push(`<button class="btn sm w" onclick="openResched('${a.id}')">Reschedule</button>`);
+        if (["pending", "confirmed"].includes(a.status)) b.push(`<button class="btn sm w" onclick="askCancel('${a.id}')">Cancel</button>`);
+        const note = a.status === "pending" ? "<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>"
+          : a.status === "verifying" ? "<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>" : "";
+        return `<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
+      }
+      async function apptDetails(id) {
+        const a = DB.appts.find((x) => x.id === id);
+        if (!a) return;
+        let H = [];
+        try { H = await FN.myAppointmentHistory(id); } catch (e) { /* details still show without the timeline */ }
+        const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : "");
+        const when = (iso) => new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        modal(`<h3>Appointment details</h3><p style="margin-top:0">${pill(a.status)}</p><dl class="sumlist">${row("Booking number", "<b>" + esc(a.code) + "</b>")}${row("Services", esc(a.svc))}${row("Date & time", bfl(a.date) + " at " + m2t(a.start) + " to " + m2t(a.start + a.dur))}${row("Duration", a.estD)}${row("Technician", a.staff ? esc(te(a.staff)) : "Any available technician")}${row(a.status === "completed" ? "Total" : "Estimated price", a.estP || php(a.price))}${row("Paid", a.paid ? php(a.paid) : "")}${row("Waiting to be checked", a.sent ? php(a.sent) : "")}${row("Notes", esc(a.notes))}</dl>${H.length ? `<h3 style="font-size:1rem;margin:1rem 0 .3rem">History</h3>${H.map((h) => `<div style="border-top:1px solid var(--line);padding:.4rem 0"><small class="mute">${when(h.created_at)}</small><br>${esc(h.action)}</div>`).join("")}` : ""}${MF(`${canMove(a) ? `<button class="btn w" onclick="modal();openResched('${a.id}')">Reschedule</button>` : ""}<button class="btn" onclick="modal()">Close</button>`)}`);
+      }
+      let RSC = null; // reschedule in progress: { id, tech, date, slot, ds, warn }
+      function openResched(id) {
+        const a = DB.appts.find((x) => x.id === id);
+        if (!a) return;
+        RSC = { id, tech: a.staff || 0, date: null, slot: null, ds: 0, warn: "" };
+        P = "mine"; render(); scrollTo(0, 0);
+      }
+      function reschedView() {
+        const a = DB.appts.find((x) => x.id === RSC.id);
+        if (!a || !canMove(a)) { RSC = null; return mine(); }
+        const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+        const days = [...Array(7)].map((_, i) => { const d = new Date(t0); d.setDate(d.getDate() + RSC.ds * 7 + i); return d; }),
+          f = RSC.date ? free(RSC.date, a.dur, 0, RSC.tech) : [],
+          grp = [["Morning", (x) => x < 720], ["Afternoon", (x) => x >= 720 && x < 1020], ["Evening", (x) => x >= 1020]];
+        return W(`<h2>Reschedule appointment</h2><div class="card"><small>Current booking · ${esc(a.code)}</small><br><b>${esc(a.svc)}</b><br><small>${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small></div>
+<label for="rs_t">Technician</label><select id="rs_t" onchange="RSC.tech=+this.value;RSC.slot=null;RSC.warn='';render()"><option value="0">Any available technician</option>${TE.map((t) => `<option value="${t.id}" ${RSC.tech === t.id ? "selected" : ""}>${esc(t.n)} · ${esc(t.sp)}</option>`).join("")}</select>
+<h3 style="margin:1rem 0 .3rem">Pick a new date and time</h3><div class="row" style="margin-top:.6rem"><button class="btn sm w" ${RSC.ds ? "" : "disabled"} onclick="RSC.ds--;render()" aria-label="Previous week">‹</button><b>${bfl(fmt(days[0]))} to ${bfl(fmt(days[6]))}</b><button class="btn sm w" ${RSC.ds >= 7 ? "disabled" : ""} onclick="RSC.ds++;render()" aria-label="Next week">›</button></div><div class="dstrip">${days.map((d) => { const iso = fmt(d); return `<button class="chip ${RSC.date === iso ? "on" : ""}" ${free(iso, a.dur, 0, RSC.tech).length ? "" : "disabled"} onclick="RSC.date='${iso}';RSC.slot=null;RSC.warn='';render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b></button>`; }).join("")}</div>${RSC.warn ? `<div class="msg">${esc(RSC.warn)}</div>` : ""}${RSC.date ? grp.map(([n, fn]) => { const L = f.filter(fn); return L.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .2rem">${n}</h3><div class="chips" style="margin-top:0">${L.map((t) => `<button class="chip ${RSC.slot === t ? "on" : ""}" onclick="RSC.slot=${t};RSC.warn='';render()">${m2t(t)}</button>`).join("")}</div>` : ""; }).join("") || '<div class="msg">No times left that day. Pick another day.</div>' : '<p class="mute">Pick a day to see the available times.</p>'}
+<p class="mute">Your payment and booking number stay the same.</p><p class="row" style="justify-content:flex-start;gap:.6rem"><button class="btn w" onclick="RSC=null;render()">Back</button><button class="btn" ${RSC.slot == null ? 'disabled style="opacity:.4"' : ""} onclick="askResched()">Confirm new time</button></p>`, 720);
+      }
+      function askResched() {
+        const a = DB.appts.find((x) => x.id === RSC.id);
+        if (!a || RSC.slot == null) return;
+        modal(`<h3>Move your appointment?</h3><dl class="sumlist"><dt>From</dt><dd>${bfl(a.date)} at ${m2t(a.start)}</dd><dt>To</dt><dd><b>${bfl(RSC.date)} at ${m2t(RSC.slot)}</b></dd><dt>Technician</dt><dd>${RSC.tech ? esc(te(RSC.tech)) : "Any available technician"}</dd></dl>${MF(`<button class="btn w" onclick="modal()">Back</button><button class="btn" onclick="doResched()">Move appointment</button>`)}`);
+      }
+      async function doResched() {
+        modal();
+        try {
+          await FN.rescheduleMyBooking(RSC.id, RSC.date, RSC.slot, RSC.tech);
+          clearSlots(); await loadAppts(); RSC = null; render(); scrollTo(0, 0);
+          modal(`<h3>Appointment moved</h3><p>Your appointment has been moved. You can see the new date and time in My Appointments.</p>${MF('<button class="btn" onclick="modal()">OK</button>')}`);
+        } catch (e) {
+          clearSlots();
+          if (RSC) { RSC.slot = null; RSC.warn = e.message || "Something went wrong. Please try again."; }
+          render();
+        }
+      }
       const askCancel = (id) =>
-        modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="cancelBk('${id}')">Yes, cancel</button>`)}`);
+        modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="cancelBk('${id}')">Cancel</button>`)}`);
       async function cancelBk(id) {
         try { await FN.cancelMyBooking(id); await loadAppts(); modal(); render(); }
         catch (e) { modal(`<h3>Could not cancel</h3><p>${esc(e.message)}</p>${MF('<button class="btn w" onclick="modal()">Close</button>')}`); }

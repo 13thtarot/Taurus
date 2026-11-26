@@ -56,6 +56,14 @@ export async function myAppointments() {
     .order("start_at", { ascending: false }));
 }
 
+/** Move the customer's own booking to another free date/time (and technician). The server re-checks the slot. */
+export const rescheduleMyBooking = async (id, date, startMin, techId) =>
+  must(await sb.rpc("reschedule_my_booking", { p_appt: id, p_date: date, p_start_min: startMin, p_tech: techId || 0 }));
+
+/** Timeline of what happened to one of the customer's bookings. */
+export const myAppointmentHistory = async (id) =>
+  must(await sb.from("appointment_history").select("action, created_at").eq("appointment_id", id).order("created_at"));
+
 export const cancelMyBooking = async (id) => must(await sb.rpc("cancel_my_booking", { p_appt: id }));
 
 /** After returning from checkout: wait for the DATABASE (webhook-driven) to say 'confirmed'. */

@@ -38,6 +38,8 @@ const MSG = {
   NOT_IN_SERVICE: "Only appointments that are in service can be marked as completed.",
   BILL_FIRST: "Create the bill and collect payment before marking this as completed.",
   BALANCE_DUE: "Collect the remaining balance before marking this as completed.",
+  NOT_RESCHEDULABLE: "This appointment can no longer be rescheduled.",
+  TOO_LATE_TO_RESCHEDULE: "Appointments can't be moved within 2 hours of the start time. Please call the salon.",
   EMAIL_CHANGE_VIA_AUTH: "Your email can only be changed from the Email field (we send a confirmation link).",
 };
 export const friendly = (m = "") => MSG[(m.match(/[A-Z_]{6,}/) || [""])[0]] || m;
