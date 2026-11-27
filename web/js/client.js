@@ -41,6 +41,7 @@ const MSG = {
   ALREADY_REVIEWED: "This request was already handled.",
   REASON_REQUIRED: "Please give a reason.",
   NOT_RESCHEDULABLE: "This appointment can no longer be rescheduled.",
+  BASE_SERVICE_REQUIRED: "Nail art and add-ons are done on top of another service. Please add a manicure, pedicure, gel or extension service.",
   TOO_LATE_TO_CANCEL: "This appointment has already started or passed, so it can't be cancelled online. Please contact the salon.",
   TOO_LATE_TO_RESCHEDULE: "Appointments can't be moved within 2 hours of the start time. Please call the salon.",
   EMAIL_CHANGE_VIA_AUTH: "Your email can only be changed from the Email field (we send a confirmation link).",

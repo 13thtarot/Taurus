@@ -387,12 +387,33 @@ ${fld("sv_n", "Service name", "text", v.n)}<label>Group</label><select id="sv_g"
       }
       const payCard = () => {
         const p = DB.pay || {}, inp = (id, l, v, ph, extra = "") => `<div><label for="${id}">${l}</label><input id="${id}" value="${esc(v || "")}" placeholder="${ph}" ${extra}></div>`;
-        return `<div class="card" style="margin-bottom:1rem"><b>Payment details</b><br><small>Customers see these when they pay for a booking, then upload a screenshot of their receipt for your team to check under Payment checks.</small>
+        return `<div class="card" style="margin-bottom:1rem"><b>Payment details</b><br><small>Customers see these when they pay for a booking, then upload a screenshot of their receipt for your team to check under Payment checks.</small>${p.gcashNumber || p.mayaNumber || p.qrUrl ? "" : '<div class="msg" style="margin:.6rem 0 0">Customers can\'t pay for bookings yet. Add your GCash or Maya number (or a QR code) below.</div>'}
 <div class="g2" style="grid-template-columns:1fr 1fr;margin-top:.6rem">${inp("py_gn", "GCash account name", p.gcashName, "e.g. Fairytale Nails Salon", 'maxlength="60"')}${inp("py_gu", "GCash number", p.gcashNumber, "09XXXXXXXXX", 'maxlength="13" inputmode="numeric"')}${inp("py_mn", "Maya account name", p.mayaName, "Leave blank if you don't use Maya", 'maxlength="60"')}${inp("py_mu", "Maya number", p.mayaNumber, "09XXXXXXXXX", 'maxlength="13" inputmode="numeric"')}</div>
 ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are checked within 30 minutes during opening hours.", 'maxlength="200"')}
 <p><button class="btn sm" onclick="savePay()">Save payment details</button></p>
 <label>Payment QR code (optional)</label><div class="row" style="justify-content:flex-start;align-items:center;gap:1rem">${p.qrUrl ? `<img src="${esc(p.qrUrl)}" alt="Payment QR code" style="width:110px;height:110px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff">` : '<small class="mute">No QR code uploaded yet.</small>'}<input type="file" accept="image/*" style="width:auto" onchange="qrUp(this)"></div></div>`;
       };
+      // Salon contact & location (TC-15, TC-21): shown in the customer site's footer, About page and after a receipt is sent.
+      const contactCard = () => {
+        const c = DB.contact || {}, inp = (id, l, v, ph, extra = "") => `<div><label for="${id}">${l}</label><input id="${id}" value="${esc(v || "")}" placeholder="${ph}" ${extra}></div>`;
+        return `<div class="card" style="margin-bottom:1rem"><b>Salon contact &amp; location</b><br><small>Customers see these in the website footer, on the About page and after they send a payment receipt. Leave a field blank to hide it.</small>
+<div class="g2" style="grid-template-columns:1fr 1fr;margin-top:.6rem">${inp("ct_ad", "Address", c.address, "e.g. 12 Sampaguita St., Teachers Village, Quezon City", 'maxlength="160"')}${inp("ct_ph", "Phone / mobile", c.phone, "e.g. 0917 123 4567", 'maxlength="20" inputmode="tel"')}${inp("ct_em", "Email", c.email, "e.g. hello@yoursalon.com", 'maxlength="120" type="email"')}${inp("ct_ig", "Instagram username", c.instagram, "e.g. fairytalenails", 'maxlength="60"')}${inp("ct_fb", "Facebook page link", c.facebook, "e.g. https://www.facebook.com/yoursalon", 'maxlength="200"')}</div>
+<p><button class="btn sm" onclick="saveContact()">Save contact details</button></p></div>`;
+      };
+      async function saveContact() {
+        const v = (id) => (document.getElementById(id).value || "").trim().replace(/\s+/g, " ");
+        const ad = v("ct_ad"), ph = v("ct_ph"), em = v("ct_em"), fb = v("ct_fb"), ig = v("ct_ig").replace(/^@/, "");
+        if (ph && !/^[0-9+()\s-]{7,20}$/.test(ph)) return toast("Enter a valid phone number, e.g. 0917 123 4567.");
+        if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return toast("Enter a valid email address.");
+        if (ig && !/^[A-Za-z0-9._]{1,30}$/.test(ig)) return toast("Enter just the Instagram username, e.g. fairytalenails.");
+        if (fb && !/^(https?:\/\/)?(www\.|m\.|web\.)?(facebook|fb)\.com\/\S+$/i.test(fb)) return toast("Paste the full link to your Facebook page.");
+        try {
+          await FN.saveSettings({ salon_address: ad, salon_phone: ph, salon_email: em, salon_facebook: fb, salon_instagram: ig });
+          DB.contact = { address: ad, phone: ph, email: em, facebook: fb, instagram: ig };
+          toast("Contact details saved.");
+        } catch (e) { fail(e); }
+        render();
+      }
       async function savePay() {
         const v = (id) => (document.getElementById(id).value || "").trim(), num = (id) => v(id).replace(/\D/g, "");
         const g = num("py_gu"), m = num("py_mu");
@@ -414,7 +435,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
       }
       function ohs() {
         const H = DB.hours;
-        return payCard() + `<div class="card" style="margin-bottom:1rem"><b>Operating hours</b><div class="cards" style="grid-template-columns:repeat(4,1fr)">${tm("Opens", H.o, "o")}${tm("Closes", H.c, "c")}${tm("Lunch starts", H.ls, "ls")}${tm("Lunch ends", H.le, "le")}</div>${HE ? `<div class="msg">${HE}</div>` : ""}<small>Times use 30-minute steps.</small><label>Open days</label><div class="row" style="justify-content:flex-start;gap:1.2rem">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<label style="display:inline-flex;gap:.3rem;align-items:center;margin:0;font-weight:400"><input type="checkbox" style="width:auto" ${DB.openDays.includes(d) ? "checked" : ""} onchange="togDay(${d},this.checked)">${DN[d]}</label>`).join("")}</div></div>
+        return payCard() + contactCard() + `<div class="card" style="margin-bottom:1rem"><b>Operating hours</b><div class="cards" style="grid-template-columns:repeat(4,1fr)">${tm("Opens", H.o, "o")}${tm("Closes", H.c, "c")}${tm("Lunch starts", H.ls, "ls")}${tm("Lunch ends", H.le, "le")}</div>${HE ? `<div class="msg">${HE}</div>` : ""}<small>Times use 30-minute steps.</small><label>Open days</label><div class="row" style="justify-content:flex-start;gap:1.2rem">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<label style="display:inline-flex;gap:.3rem;align-items:center;margin:0;font-weight:400"><input type="checkbox" style="width:auto" ${DB.openDays.includes(d) ? "checked" : ""} onchange="togDay(${d},this.checked)">${DN[d]}</label>`).join("")}</div></div>
 <div class="card" style="margin-bottom:1rem"><b>Days off</b><div class="row" style="justify-content:flex-start;margin:.5rem 0"><input type="date" id="do" style="width:auto"><button class="btn sm" onclick="addOff()">Add day off</button></div><div class="chips">${
           [...DB.off]
             .sort()
@@ -786,7 +807,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         Object.assign(GN, c.GN);
         DB.SV = c.SV; DB.CATS = c.raw.cats;
         TE.splice(0, TE.length, ...c.raw.techs.map((t) => ({ id: t.id, n: t.name, sp: t.specialty, off: t.day_off, rate: +t.commission_rate, on: t.active })));
-        DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.pay = c.pay || {};
+        DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.pay = c.pay || {}; DB.contact = c.contact || {};
         tab = GR[0];
       }
       async function afterLogin() {

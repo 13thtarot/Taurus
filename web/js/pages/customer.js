@@ -203,7 +203,8 @@
       let DB = {
         SV, TE: TE0, hours: { o: 600, c: 1110, ls: 720, le: 780 }, openDays: [1, 2, 3, 4, 5, 6],
         owner: null, sms: [], off: [], appts: [], q: [], users: [], staff: [], backup: null,
-        deposit: 250, test: true,
+        deposit: 250, test: true, hold: 15, pay: {},
+        contact: { address: "Quezon City, Metro Manila", phone: "", email: "", facebook: "", instagram: "fairytalenails" },
       };
       const TE = DB.TE;
       const save = () => {};
@@ -253,13 +254,26 @@
         F = { q: "", s: "", k: "time", c: "" };
       V = "customer";
       P = "home";
-      {
-        const SS = sess();
-        if (SS && SS.role === "customer")
-          U = DB.users.find((x) => x.id === SS.id) || null;
-        const hp = location.hash.slice(1);
-        if (["home", "services", "gallery", "about", "login", "signup", "forgot", "book", "mine", "acct"].includes(hp)) P = hp;
+      /* ---------- page addresses (TC-20): every screen has its own #/… link, so Refresh, Back and shared links keep your place ---------- */
+      const ROUTES = { home: "", services: "services", gallery: "gallery", about: "about", login: "login", signup: "signup", forgot: "forgot-password", reset: "reset-password", book: "book", mine: "appointments", acct: "account" };
+      const PAGE_OF = { ...Object.fromEntries(Object.entries(ROUTES).map(([k, v]) => [v, k])), home: "home", mine: "mine", acct: "acct", forgot: "forgot" }; // older #mine / #acct links still work
+      const STEPS = ["svc", "tech", "time", "review", "confirm"]; // booking steps, same order as bord()
+      const DRAFT_KEY = "ft_booking_draft";
+      let ROUTE_NOW = null, WANT = null, LOGIN_NEXT = null, ROUTE_REPLACE = false;
+      // Reads an address like "#/book/time" or "#/bookings/FN-1234567/pay" into the page state. False for unknown links.
+      function applyRoute(hash) {
+        const h = String(hash || "").replace(/^#\/?/, "");
+        if (/access_token=|error_description=|type=recovery/.test(h)) return false; // sign-in links are read by boot()
+        const [a = "", b = "", c = ""] = h.split("/").map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+        if (a === "bookings" && b && (c === "pay" || c === "reschedule")) { P = c === "pay" ? "book" : "mine"; WANT = { kind: c, code: b }; return true; }
+        const p = PAGE_OF[a];
+        if (!p) return false;
+        P = p;
+        if (p === "book") B.step = Math.max(0, STEPS.indexOf(b));
+        return true;
       }
+      try { const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); if (d && d.sel) B = { ...d, step: 0 }; } catch (e) { /* no saved booking */ }
+      applyRoute(location.hash);
       const te = (id) => (TE.find((x) => x.id === id) || { n: "Unassigned" }).n,
         LB = {
           pending: "Awaiting payment",
@@ -293,6 +307,8 @@
           return;
         }
         P = p;
+        PAY = null; RSC = null; // leaving the payment or reschedule screen
+        if (!["login", "signup", "forgot"].includes(p)) WANT = null;
         if (p === "book" && B.done) B = { step: 0 };
         render();
         scrollTo(0, 0);
@@ -328,18 +344,36 @@
       const TILE = ["a", "b", "a", "b", "c", "c", "c"]; // staggered tile shapes; any photo is cropped to fit its tile
       const galTile = (g, i) =>
         `<div class="ph ${TILE[i % TILE.length]}"><img src="${esc(g.url)}" alt="${esc(g.title)} nail art" loading="lazy" style="object-position:center ${g.focus || "center"}"><span>▣ ${esc(g.title)}</span></div>`;
-      const galTiles = () => {
-        const list = GAL || GAL_DEFAULT;
+      // The home page already shows four photos up top, so its gallery strip skips those (TC-21).
+      const HERO = ["florals", "lace", "dark", "emerald"].map((k) => IMG[k]);
+      const galTiles = (home) => {
+        const list = (GAL || GAL_DEFAULT).filter((g) => !home || !HERO.includes(g.url));
         return list.length ? list.map(galTile).join("") : '<p class="mute" style="grid-column:1/-1">New photos are coming soon.</p>';
       };
       async function refreshGallery() { // pick up photo changes made in the owner portal
         try { GAL = await FN.loadGallery(); if (P === "gallery" && !$("#md").innerHTML) render(); } catch (e) { /* keep what we have */ }
       }
-      const gallery = () =>
-        `<section class="sec" style="padding-bottom:1rem"><div class="wrap"><small style="letter-spacing:.14em;border-bottom:1px solid var(--ink)">GALLERY</small><h2 style="margin-top:.6rem">Recent nail art</h2><p class="mute" style="max-width:32rem;margin:0 0 1.4rem">Cat-eye, chrome, 3D florals, fruit sets and more, all hand-made, one set at a time.</p><div class="gal">${galTiles()}</div><p style="margin-top:1.6rem"><a class="btn o" style="display:inline-block;text-decoration:none" href="https://www.facebook.com/" target="_blank" rel="noopener">See more on Facebook</a></p></div></section>`;
+      const gallery = (home) =>
+        `<section class="sec" style="padding-bottom:1rem"><div class="wrap"><small style="letter-spacing:.14em;border-bottom:1px solid var(--ink)">GALLERY</small><h2 style="margin-top:.6rem">Recent nail art</h2><p class="mute" style="max-width:32rem;margin:0 0 1.4rem">Cat-eye, chrome, 3D florals, fruit sets and more, all hand-made, one set at a time.</p><div class="gal">${galTiles(home)}</div>${socialBtn()}</div></section>`;
+      // Salon location and contact details, edited by the owner (TC-15, TC-21).
+      const fbUrl = (f) => (/^https?:\/\//i.test(f) ? f : "https://www.facebook.com/" + String(f).replace(/^@/, ""));
+      function contactHtml(cls = "") {
+        const c = DB.contact || {}, L = [];
+        if (c.address) L.push(`<a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent("Fairytale Nails Salon, " + c.address)}" target="_blank" rel="noopener">📍 ${esc(c.address)}</a>`);
+        if (c.phone) L.push(`<a href="tel:${esc(c.phone.replace(/[^\d+]/g, ""))}">📞 ${esc(c.phone)}</a>`);
+        if (c.email) L.push(`<a href="mailto:${esc(c.email)}">✉ ${esc(c.email)}</a>`);
+        if (c.instagram) L.push(`<a href="https://www.instagram.com/${encodeURIComponent(c.instagram)}/" target="_blank" rel="noopener">Instagram @${esc(c.instagram)}</a>`);
+        if (c.facebook) L.push(`<a href="${esc(fbUrl(c.facebook))}" target="_blank" rel="noopener">Facebook</a>`);
+        return L.length ? `<span class="contact ${cls}">${L.join("")}</span>` : "";
+      }
+      // "See more" opens the salon's own Facebook or Instagram page, never a generic link.
+      const socialBtn = () => {
+        const c = DB.contact || {}, url = c.facebook ? fbUrl(c.facebook) : c.instagram ? "https://www.instagram.com/" + encodeURIComponent(c.instagram) + "/" : "";
+        return url ? `<p style="margin-top:1.6rem"><a class="btn o" style="display:inline-block;text-decoration:none" href="${esc(url)}" target="_blank" rel="noopener">See more on ${c.facebook ? "Facebook" : "Instagram"}</a></p>` : "";
+      };
       const home =
-        () => (phN = 0, `<section class="hero"><div class="wrap two"><div><span class="tag"><span style="color:var(--red)">✦</span> HOME-BASED NAIL STUDIO</span><h1>Nails with a little bit of <em>magic</em>.</h1><p style="max-width:30rem">Gel care, soft-gel extensions and hand-crafted nail art. Choose your services, pick a time, and book your slot online.</p><p><button class="btn o" onclick="go('services')">See services &amp; prices</button></p></div><div class="hp"><div>${ph("florals", "3D florals", "t1")}${ph("lace", "Lace & florals", "t3")}</div><div>${ph("dark", "Dark embellished", "t3")}${ph("emerald", "Emerald & gold", "t1")}</div></div></div></section>${gallery()}
-<section class="sec"><div class="wrap"><small>OUR FAVORITES</small><div class="row"><h2>Pick your little luxury</h2><a class="pr" href="#services" onclick="event.preventDefault();go('services')">View all services →</a></div><div class="cards">${[
+        () => (phN = 0, `<section class="hero"><div class="wrap two"><div><span class="tag"><span style="color:var(--red)">✦</span> HOME-BASED NAIL STUDIO</span><h1>Nails with a little bit of <em>magic</em>.</h1><p style="max-width:30rem">Gel care, soft-gel extensions and hand-crafted nail art. Choose your services, pick a time, and book your slot online.</p><p><button class="btn o" onclick="go('services')">See services &amp; prices</button></p></div><div class="hp"><div>${ph("florals", "3D florals", "t1")}${ph("lace", "Lace & florals", "t3")}</div><div>${ph("dark", "Dark embellished", "t3")}${ph("emerald", "Emerald & gold", "t1")}</div></div></div></section>${gallery(true)}
+<section class="sec"><div class="wrap"><small>OUR FAVORITES</small><div class="row"><h2>Pick your little luxury</h2><a class="pr" href="#/services" onclick="event.preventDefault();go('services')">View all services →</a></div><div class="cards">${[
           [
             "Basic Care",
             "var(--sage)",
@@ -371,10 +405,10 @@
           ["Choose a service", "Browse services and pick what feels right."],
           ["Pick a time", "Find a date and slot that fits your day."],
           [
-            "Pay the ₱" + DB.deposit + " reservation",
-            "Pay the deposit online to hold your slot.",
+            "Pay the ₱" + DB.deposit + " down payment",
+            "Send it by GCash or Maya and upload your receipt.",
           ],
-          ["Get confirmed", "We'll send all the details straight to you."],
+          ["Get confirmed", "We confirm your booking once we've checked your payment."],
         ]
           .map(
             (s, i) =>
@@ -388,7 +422,7 @@
       const forgot = () =>
         W(FG.sent
           ? `<div class="card auth"><h2>Check your email</h2><p>If an account uses <b>${esc(FG.email)}</b>, we've sent it a link to reset your password. The link works once and expires after about an hour.</p><p class="mute">Not there after a few minutes? Check your spam or promotions folder, or <a class="pr" style="cursor:pointer" onclick="FG={email:FG.email};render()">send it again</a>.</p><p><button class="btn" style="width:100%" onclick="go('login')">Back to log in</button></p></div>`
-          : `<div class="card auth"><h2>Forgot your password?</h2><p class="mute">Enter the email (or username) on your account and we'll send you a link to set a new password.</p><label for="fg_e">Email or username</label><input id="fg_e" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com" value="${esc(FG.email || "")}" onkeydown="if(event.key==='Enter')doForgot()">${FG.err ? `<div class="msg">${esc(FG.err)}</div>` : ""}<p><button class="btn" style="width:100%" ${FG.busy ? "disabled" : ""} onclick="doForgot()">${FG.busy ? "Sending..." : "Send reset link"}</button></p><small>Remembered it? <a class="pr" href="#login" onclick="event.preventDefault();go('login')">Log in</a></small></div>`,
+          : `<div class="card auth"><h2>Forgot your password?</h2><p class="mute">Enter the email (or username) on your account and we'll send you a link to set a new password.</p><label for="fg_e">Email or username</label><input id="fg_e" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com" value="${esc(FG.email || "")}" onkeydown="if(event.key==='Enter')doForgot()">${FG.err ? `<div class="msg">${esc(FG.err)}</div>` : ""}<p><button class="btn" style="width:100%" ${FG.busy ? "disabled" : ""} onclick="doForgot()">${FG.busy ? "Sending..." : "Send reset link"}</button></p><small>Remembered it? <a class="pr" href="#/login" onclick="event.preventDefault();go('login')">Log in</a></small></div>`,
           460);
       async function doForgot() {
         const e = (($("#fg_e") || {}).value || "").trim();
@@ -419,12 +453,12 @@
       }
       const login = () =>
         W(
-          `<div class="card auth"><h2>Welcome back</h2><p class="mute">Log in to manage your appointments and bookings.</p><label for="li_u">Email or username</label><input id="li_u" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com"><label for="li_p">Password</label><div class="pwrow"><input id="li_p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"><button class="eye" type="button" onclick="togglePassword('li_p',this)">Show</button></div><p style="margin:.4rem 0 0;text-align:right"><a class="pr" href="#forgot" onclick="event.preventDefault();FG={};go('forgot')"><small>Forgot password?</small></a></p><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doLogin()">Log in</button></p><small>New here? <a class="pr" href="#signup" onclick="event.preventDefault();go('signup')">Create an account</a></small></div>`,
+          `<div class="card auth"><h2>Welcome back</h2><p class="mute">Log in to manage your appointments and bookings.</p><label for="li_u">Email or username</label><input id="li_u" type="text" autocomplete="username" autocapitalize="none" placeholder="you@example.com"><label for="li_p">Password</label><div class="pwrow"><input id="li_p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"><button class="eye" type="button" onclick="togglePassword('li_p',this)">Show</button></div><p style="margin:.4rem 0 0;text-align:right"><a class="pr" href="#/forgot-password" onclick="event.preventDefault();FG={};go('forgot')"><small>Forgot password?</small></a></p><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doLogin()">Log in</button></p><small>New here? <a class="pr" href="#/signup" onclick="event.preventDefault();go('signup')">Create an account</a></small></div>`,
           460,
         );
       const gate = () =>
         W(
-          `<h2>Log in to continue</h2><p class="mute">Create an account or log in to book and manage appointments.</p><button class="btn" onclick="go('login')">Log in</button> <button class="btn w" onclick="go('signup')">Sign up</button>`,
+          `<h2>Log in to continue</h2><p class="mute">Create an account or log in to book and manage appointments.</p><button class="btn" onclick="LOGIN_NEXT=P;go('login')">Log in</button> <button class="btn w" onclick="LOGIN_NEXT=P;go('signup')">Sign up</button>`,
           420,
         );
       /* ---------- Services & Prices: regular services, packages, nail art and add-ons ---------- */
@@ -469,7 +503,7 @@
       const services = () => {
         const fams = SVT === "All" ? FAM : FAM.filter((f) => f[0] === SVT);
         return W(
-          `<h2>Services &amp; Prices</h2><p class="mute">Prices in Philippine pesos. A ₱${DB.deposit} reservation deposit holds your slot and is deducted from your bill. Nail art prices are confirmed after the salon reviews your reference design.</p>
+          `<h2>Services &amp; Prices</h2><p class="mute">Prices in Philippine pesos. A ₱${DB.deposit} down payment (or the full price, if it's lower) holds your slot and is deducted from your bill. Nail art prices are confirmed after the salon reviews your reference design.</p>
 <div class="svnav" role="tablist">${["All", ...FAM.map((f) => f[0])].map((t) => `<button role="tab" class="chip ${SVT === t ? "on" : ""}" onclick="SVT='${t}';render()">${t}${t === "All" ? "" : ` <small>(${SVA().filter((s) => FAM.find((f) => f[0] === t)[1](s.g || "")).length})</small>`}</button>`).join("")}</div>
 ${fams.map(([name, test, blurb]) => {
             const groups = GR.filter(test).map(groupBlock).join("");
@@ -481,11 +515,11 @@ ${fams.map(([name, test, blurb]) => {
       };
       const about = () =>
         W(
-          `<h2>About us</h2><div class="card"><p>A cozy salon in Quezon City with 7 stations and 8 technicians.</p><p class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}. Lunch break ${m2t(DB.hours.ls)} to ${m2t(DB.hours.le)}. Follow us on Instagram: @fairytalenails</p></div>`,
+          `<h2>About us</h2><div class="card"><p>A cozy salon in Quezon City with 7 stations and 8 technicians.</p><p class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}. Lunch break ${m2t(DB.hours.ls)} to ${m2t(DB.hours.le)}.</p><h3 style="font-size:1rem;margin:1rem 0 .4rem">Visit or contact us</h3>${contactHtml("stack") || '<p class="mute">Contact details coming soon.</p>'}</div>`,
         );
       const signup = () =>
         W(
-          `<div class="card auth"><h2>Create your account</h2><p class="mute">Create an account to book appointments and manage your visits.</p><label for="su_n">Full name</label><input id="su_n" autocomplete="name" placeholder="e.g. Maria Santos" maxlength="60" oninput="pwCheck()"><label for="su_e">Email address</label><input id="su_e" type="email" autocomplete="email" placeholder="you@example.com" oninput="pwCheck()">${phoneFld("su_p", "Mobile number", "")}<label for="su_w">Password</label><div class="pwrow"><input id="su_w" type="password" autocomplete="new-password" placeholder="Create a strong password" maxlength="72" oninput="pwCheck()"><button class="eye" type="button" onclick="togglePassword('su_w',this)">Show</button></div><div class="pwm" id="pwm" data-s="0"><i></i><i></i><i></i><i></i><b></b></div><ul class="pwl" id="pwl">${PWR.map(([t]) => `<li>• ${t}</li>`).join("")}</ul><label for="su_w2">Confirm password</label><div class="pwrow"><input id="su_w2" type="password" autocomplete="new-password" placeholder="Type it again" maxlength="72" oninput="pwCheck()" onkeydown="if(event.key==='Enter')doSignup()"><button class="eye" type="button" onclick="togglePassword('su_w2',this)">Show</button></div><small class="fhint" id="su_w2_h">Type the same password again.</small><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doSignup()">Create account</button></p><small>Already have an account? <a class="pr" href="#login" onclick="event.preventDefault();go('login')">Log in</a></small></div>`,
+          `<div class="card auth"><h2>Create your account</h2><p class="mute">Create an account to book appointments and manage your visits.</p><label for="su_n">Full name</label><input id="su_n" autocomplete="name" placeholder="e.g. Maria Santos" maxlength="60" oninput="pwCheck()"><label for="su_e">Email address</label><input id="su_e" type="email" autocomplete="email" placeholder="you@example.com" oninput="pwCheck()">${phoneFld("su_p", "Mobile number", "")}<label for="su_w">Password</label><div class="pwrow"><input id="su_w" type="password" autocomplete="new-password" placeholder="Create a strong password" maxlength="72" oninput="pwCheck()"><button class="eye" type="button" onclick="togglePassword('su_w',this)">Show</button></div><div class="pwm" id="pwm" data-s="0"><i></i><i></i><i></i><i></i><b></b></div><ul class="pwl" id="pwl">${PWR.map(([t]) => `<li>• ${t}</li>`).join("")}</ul><label for="su_w2">Confirm password</label><div class="pwrow"><input id="su_w2" type="password" autocomplete="new-password" placeholder="Type it again" maxlength="72" oninput="pwCheck()" onkeydown="if(event.key==='Enter')doSignup()"><button class="eye" type="button" onclick="togglePassword('su_w2',this)">Show</button></div><small class="fhint" id="su_w2_h">Type the same password again.</small><div id="ae"></div><p><button class="btn" style="width:100%" onclick="doSignup()">Create account</button></p><small>Already have an account? <a class="pr" href="#/login" onclick="event.preventDefault();go('login')">Log in</a></small></div>`,
           480,
         );
       /* booking */
@@ -511,6 +545,34 @@ ${fams.map(([name, test, blurb]) => {
           sm("d") === dmax()
             ? durT(dmax())
             : durT(sm("d")) + " to " + durT(dmax());
+      // TC-01: what the customer pays now. The down payment never exceeds the booking's estimated total.
+      const downFor = (lo) => (lo > 0 ? Math.min(DB.deposit, lo) : DB.deposit),
+        fullFor = (lo) => (lo > 0 ? lo : DB.deposit);
+      // TC-02: nail art and add-ons are done on top of a base service.
+      const isAddOn = (s) => /add-on/i.test(s.g || ""),
+        onlyAddOns = () => sel().length > 0 && sel().every(isAddOn);
+      // The furthest booking step the current choices allow (after a refresh, a Back press, or only add-ons picked).
+      function maxStep() {
+        if (!sel().length || onlyAddOns()) return 0;
+        if (B.slot == null || !B.date) return STEPS.indexOf("time");
+        if (!(NAME_RE.test((B.name || "").trim()) && PH_RE.test(B.phone || "") && EMAIL_RE.test(B.email || ""))) return STEPS.indexOf("review");
+        return STEPS.indexOf("confirm");
+      }
+      // TC-05: why a day can't be picked, shown on the date and explained under the week.
+      function dayInfo(iso, dur, tid) {
+        const dow = new Date(iso + "T00:00").getDay(), t = tid ? TE.find((x) => x.id === tid) : null;
+        if (!DB.openDays.includes(dow) || DB.off.includes(iso)) return { ok: false, tag: "Closed", why: "the salon is closed" };
+        if (t && t.off === dow) return { ok: false, tag: "Day off", why: esc(t.n) + "'s day off" };
+        if (free(iso, dur, 0, tid).length) return { ok: true, tag: "", why: "" };
+        const k = iso + "|" + dur + "|" + (tid || 0);
+        if (SL[k] && SL[k].v === null) return { ok: false, tag: "", why: "" }; // still loading
+        return iso === today() ? { ok: false, tag: "Full", why: "no times left today" } : { ok: false, tag: "Full", why: "fully booked" + (t ? " for " + esc(t.n) : "") };
+      }
+      function dayNote(days, dur, tid) {
+        const L = days.map((d) => [d, dayInfo(fmt(d), dur, tid)]).filter(([, i]) => !i.ok && i.why);
+        if (!L.length) return "";
+        return `<p class="daynote"><small>Greyed-out days: ${L.map(([d, i]) => `<b>${bfl(fmt(d))}</b> ${i.why}`).join(" · ")}. ${tid ? "Pick another day, or choose “Any available technician” for more times." : "Please pick another day."}</small></p>`;
+      }
       
       function tg(id) {
         B.sel = B.sel || [];
@@ -559,7 +621,7 @@ ${fams.map(([name, test, blurb]) => {
                 )
                 .join("")
             : '<p class="mute">No services selected yet.</p>'
-        }${B.tech || bidx("tech") < B.step ? `<p style="margin:.7rem 0 0"><small>Technician</small><br><b>${B.tech ? esc(te(B.tech)) : "Any available technician"}</b></p>` : ""}${B.slot != null ? `<p style="margin:.5rem 0 0"><small>Date and time</small><br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p>` : ""}${sel().length ? `<div class="row" style="margin-top:.8rem"><small>Estimated duration</small><b>${dur()}</b></div><div class="row"><small>Estimated total</small><b class="pr">${prr()}</b></div>` : ""}<small>The salon confirms final nail art prices.</small></div>`;
+        }${B.tech || bidx("tech") < B.step ? `<p style="margin:.7rem 0 0"><small>Technician</small><br><b>${B.tech ? esc(te(B.tech)) : "Any available technician"}</b></p>` : ""}${B.slot != null ? `<p style="margin:.5rem 0 0"><small>Date and time</small><br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p>` : ""}${sel().length ? `<div class="row" style="margin-top:.8rem"><small>Estimated duration</small><b>${dur()}</b></div><div class="row"><small>Estimated total</small><b class="pr">${prr()}</b></div>` : ""}${sel().some(isAddOn) ? "<small>The salon confirms final nail art prices.</small>" : sel().some((s) => s.px > s.p) ? "<small>The final price within the range is confirmed at the salon.</small>" : ""}</div>`;
       // Changing technician clears the chosen time, since each technician has different free slots.
       function pickT(id) {
         if ((B.tech || 0) !== id) { B.slot = null; B.warn = ""; }
@@ -575,6 +637,7 @@ ${fams.map(([name, test, blurb]) => {
             `<h2>${a.status === "confirmed" ? "Booking confirmed" : "Booking received"}</h2><div class="card"><p>Confirmation number <b>${a.code}</b></p><p>${a.svc}<br>${a.staff ? "with " + esc(te(a.staff)) + " · " : ""}${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}<br>Estimated ${a.estP}</p><p><b>Status: ${a.status === "confirmed" ? "Confirmed" : "Awaiting deposit"}.</b> ${a.status === "confirmed" ? "Your ₱" + DB.deposit + " deposit was recorded and your time slot is reserved." : "Your time slot is held for a few minutes. Open My Appointments to pay the deposit."}</p></div><p><button class="btn" onclick="B={step:0};go(U?'mine':'home')">${U ? "View my appointments" : "Done"}</button></p>`,
           );
         }
+        if (B.step > maxStep()) B.step = maxStep(); // e.g. after a refresh, or only add-ons picked
         const o = bord(),
           k = o[B.step],
           tm = false,
@@ -585,7 +648,7 @@ ${fams.map(([name, test, blurb]) => {
           ok = true,
           cont = true;
         if (k === "svc") {
-          ok = !!sel().length;
+          ok = !!sel().length && !onlyAddOns();
           const gs = GR.filter((g) => SVA().some((s) => s.g === g)),
             cat = gs.includes(B.cat) ? B.cat : gs[0];
           h = `<h3>Select services</h3><small>You can pick more than one.</small><div class="tabs" style="flex-wrap:wrap">${gs.map((g) => `<button class="${cat === g ? "on" : ""}" onclick="B.cat='${g}';render()">${g}</button>`).join("")}</div>${GN[cat] ? `<small>${GN[cat]}</small>` : ""}<div class="sg" style="margin-top:.6rem">${SVA()
@@ -597,6 +660,10 @@ ${fams.map(([name, test, blurb]) => {
             .join(
               "",
             )}</div>${sel().some((s) => /Add-Ons/.test(s.g)) ? `<div class="msg ok">The final nail art price is confirmed after the salon reviews your reference design.</div><label>Reference photo (optional)</label><input type="file" accept="image/*" onchange="B.refFile=this.files[0]||null;B.ref=this.files[0]?this.files[0].name:'';render()">${B.ref ? `<small>Selected: ${esc(B.ref)}</small>` : ""}` : ""}`;
+          if (onlyAddOns()) {
+            const base = gs.find((g) => !/add-on/i.test(g)) || gs[0];
+            h += `<div class="msg">Nail art and add-ons are done on top of another service. Please add a base service first, such as a manicure, pedicure, gel or extensions.</div><p style="margin:.4rem 0 0"><button class="btn sm w" onclick="B.cat='${esc(base)}';render()">Choose a base service</button></p>`;
+          }
         }
         if (k === "tech") {
           const L0 = tm ? TE.filter((t) => free(B.date, dmax(), 0, t.id).includes(B.slot)) : TE;
@@ -626,11 +693,12 @@ ${fams.map(([name, test, blurb]) => {
           h = `<h3>Select date and time</h3><small>Estimated duration: ${dur()}${tid ? " · with " + esc(te(tid)) : ""}</small><div class="row" style="margin-top:.6rem"><button class="btn sm w" ${B.ds ? "" : "disabled"} onclick="B.ds--;render()" aria-label="Previous week">‹</button><b>${bfl(fmt(days[0]))} to ${bfl(fmt(days[6]))}</b><button class="btn sm w" ${(B.ds || 0) >= 7 ? "disabled" : ""} onclick="B.ds=(B.ds||0)+1;render()" aria-label="Next week">›</button></div><div class="dstrip">${days
             .map((d) => {
               const iso = fmt(d);
-              return `<button class="chip ${B.date === iso ? "on" : ""}" ${free(iso, dmax(), 0, tid).length ? "" : "disabled"} onclick="${rs}B.date='${iso}';B.slot=null;render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b></button>`;
+              const di = dayInfo(iso, dmax(), tid);
+              return `<button class="chip ${B.date === iso ? "on" : ""}" ${di.ok ? "" : "disabled"} ${di.why ? `title="${di.why}"` : ""} onclick="${rs}B.date='${iso}';B.slot=null;render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b>${di.tag ? `<small class="why">${di.tag}</small>` : ""}</button>`;
             })
             .join(
               "",
-            )}</div>${B.warn ? `<div class="msg">${B.warn}</div>` : ""}${
+            )}</div>${dayNote(days, dmax(), tid)}${B.warn ? `<div class="msg">${B.warn}</div>` : ""}${
             B.date
               ? grp
                   .map(([n, fn]) => {
@@ -651,7 +719,12 @@ ${fams.map(([name, test, blurb]) => {
         }
         if (k === "confirm") {
           const lo = sm("p"), hi = sm("p", "px"), dn = lo > DB.deposit, opt = dn ? B.opt || "down" : (B.opt = "full");
-          h = `<h3>How much would you like to pay now?</h3><small>You pay by GCash or Maya on the next screen.</small><div class="sg" style="margin-top:.6rem">${dn ? payOpt("down", opt, "Down payment", "Reserve your slot now and pay the rest at the salon.", DB.deposit, "B.opt") : ""}${payOpt("full", opt, "Full payment", lo === hi ? "Pay the whole estimated amount now." : "Pay the starting price now. Any difference is settled at the salon.", Math.max(lo, DB.deposit), "B.opt")}</div><div class="card" style="margin-top:.8rem"><p style="margin:0">After you confirm, we hold your slot for <b>${DB.hold} minutes</b> while you send the payment and upload a screenshot of your receipt. Your booking is confirmed once the salon has checked your payment.</p></div>${B.err ? `<div class="msg">${B.err}</div>` : ""}<p class="mute">The down payment is deducted from your final bill and may be forfeited if you cancel.</p>`;
+          const fullTxt = lo === hi ? "Pay the whole estimated amount now." : "Pay the starting price now. Any difference is settled at the salon.";
+          // TC-04: when the total is at or below the down payment there is nothing to choose, so show a plain summary.
+          h = (dn
+            ? `<h3>How much would you like to pay now?</h3><small>You pay by GCash or Maya on the next screen.</small><div class="sg" style="margin-top:.6rem">${payOpt("down", opt, "Down payment", "Reserve your slot now and pay the rest at the salon.", downFor(lo), "B.opt")}${payOpt("full", opt, "Full payment", fullTxt, fullFor(lo), "B.opt")}</div>`
+            : `<h3>Payment summary</h3><small>You pay by GCash or Maya on the next screen.</small><div class="card paysum" style="margin-top:.6rem"><div class="row"><span><b>Full payment</b><br><small>${lo === hi ? `Your booking total is less than the ₱${DB.deposit} down payment, so you pay the full amount now.` : "You pay the starting price now. Any difference is settled at the salon."}</small></span><b class="pr">${php(fullFor(lo))}</b></div></div>`)
+            + `<div class="card" style="margin-top:.8rem"><p style="margin:0">After you confirm, we hold your slot for <b>${DB.hold} minutes</b> while you send the payment and upload your receipt. Your booking is confirmed once the salon has checked your payment.</p></div>${B.err ? `<div class="msg">${B.err}</div>` : ""}<p class="mute">${dn ? "The down payment is deducted from your final bill and may be forfeited if you cancel." : "Your payment is deducted from your final bill and may be forfeited if you cancel."}</p>`;
         }
         const nav = `<p style="display:flex;gap:.6rem">${B.step ? '<button class="btn w" onclick="B.step--;render()">Back</button>' : ""}${!cont ? "" : k === "review" ? '<button class="btn" onclick="det()">Continue</button>' : k === "confirm" ? `<button class="btn" ${B.busy ? "disabled" : ""} onclick="askSubmit()">${B.busy ? "Please wait..." : "Confirm & continue to payment"}</button>` : `<button class="btn" ${ok ? "" : 'disabled style="opacity:.4"'} onclick="B.step++;render()">Continue</button>`}</p>`;
         return `<section class="sec"><div class="wrap" style="max-width:980px"><h2>Book an appointment</h2>${prog}<div class="bk"><div>${h}${nav}</div>${bsum()}</div></div></section>`;
@@ -691,9 +764,9 @@ ${fams.map(([name, test, blurb]) => {
       }
       function askSubmit() {
         if (B.busy) return;
-        const amt = (B.opt || "down") === "full" ? Math.max(sm("p"), DB.deposit) : DB.deposit;
+        const lo = sm("p"), amt = (B.opt || "down") === "full" ? fullFor(lo) : downFor(lo);
         ask("Reserve this appointment?",
-          `<p>${sel().map((s) => esc(s.n)).join(", ")}<br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p><label class="agree"><input type="checkbox" id="agree" onchange="$('#dlg_yes').disabled=!this.checked"> I will send ${php(amt)} and upload the receipt within ${DB.hold} minutes. I understand the down payment may be forfeited if I cancel.</label>`,
+          `<p>${sel().map((s) => esc(s.n)).join(", ")}<br><b>${bfl(B.date)} at ${m2t(B.slot)}</b></p><label class="agree"><input type="checkbox" id="agree" onchange="$('#dlg_yes').disabled=!this.checked"> I will send ${php(amt)} and upload the receipt within ${DB.hold} minutes. I understand ${lo > DB.deposit ? "the down payment" : "this payment"} may be forfeited if I cancel.</label>`,
           "Reserve my slot", "modal();submitB()", "Not yet");
         $("#dlg_yes").disabled = true;
       }
@@ -746,7 +819,7 @@ ${list.map((a) => `<div class="card appt">${dateBox(a)}<div class="appt-b"><div 
           `<h2>Account Information</h2><p class="mute">Update your details below, then press <b>Save changes</b>. You'll be asked to confirm before anything is saved.</p>
 <div class="card acct"><h3>Profile</h3>
 ${f("a_n", "Full name", v.name, 'autocomplete="name" maxlength="60"', "Letters, spaces, dots, apostrophes and hyphens.")}
-${f("a_u", "Username", v.username, 'autocomplete="username" autocapitalize="none" maxlength="20" onblur="checkUser()"', "3-20 letters, numbers, dots or underscores. You can log in with it.")}
+${f("a_u", v.username ? "Username" : 'Username <small class="mute">(optional)</small>', v.username, 'autocomplete="username" autocapitalize="none" maxlength="20" onblur="checkUser()"', "3-20 letters, numbers, dots or underscores. You can log in with it.")}
 </div>
 <div class="card acct"><h3>Contact</h3>
 ${phoneFld("a_p", "Mobile number", v.phone.replace(/\D/g, "").slice(0, 11))}${v.phone && !PH_RE.test(v.phone) ? `<div class="msg">Your saved number "${esc(v.phone)}" is not a complete 11-digit mobile number. Please correct it.</div>` : ""}
@@ -756,7 +829,7 @@ ${U.pendingEmail ? `<div class="msg ok">Waiting for you to confirm <b>${esc(U.pe
 <div class="card acct"><h3>Address</h3><small class="mute">Optional, but if you add one, fill in every line.</small>
 ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line1" maxlength="120" placeholder="e.g. 12 Sampaguita St., Unit 3B"')}
 <div class="two-col"><div>${f("a_bg", "Barangay", v.brgy, 'maxlength="60" placeholder="e.g. Teachers Village East"')}</div><div>${f("a_ct", "City / municipality", v.city, 'list="dl_city" autocomplete="address-level2" maxlength="60" placeholder="e.g. Quezon City"')}</div></div>
-<div class="two-col"><div>${f("a_pv", "Province / region", v.prov, 'list="dl_prov" autocomplete="address-level1" maxlength="60" placeholder="e.g. Metro Manila"')}</div><div>${numFld("a_zip", "ZIP code", v.zip, 4, "1101", "4-digit ZIP code")}</div></div>
+<div class="two-col"><div>${f("a_pv", "Province / region", v.prov, 'list="dl_prov" autocomplete="address-level1" maxlength="60" placeholder="e.g. Metro Manila"')}</div><div>${numFld("a_zip", "ZIP code", v.zip, 4, "e.g. 1101", "4-digit ZIP code")}</div></div>
 <datalist id="dl_city">${opt(NCR)}</datalist><datalist id="dl_prov">${opt(PROVINCES)}</datalist>
 </div>
 <div id="ae"></div><p class="savebar"><button class="btn" onclick="saveA()">Save changes</button> <button class="btn w" onclick="render()">Discard edits</button></p>`,
@@ -797,7 +870,8 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (r.errors.length) {
           r.errors.forEach(([id, m]) => { hint(id, m, "err"); shake(id); });
           document.getElementById(r.errors[0][0]).focus();
-          return err(`Please fix ${r.errors.length === 1 ? "the highlighted field" : r.errors.length + " highlighted fields"} before saving.`);
+          const addrErr = r.errors.some(([id]) => ["a_st", "a_bg", "a_ct", "a_pv", "a_zip"].includes(id));
+          return err(`Please fix ${r.errors.length === 1 ? "the highlighted field" : r.errors.length + " highlighted fields"} before saving.${addrErr ? " An address needs every line filled in (house and street, barangay, city, province and ZIP code), or leave all of them blank." : ""}`);
         }
         if (!r.changes.length)
           return modal(`<div class="dlg"><div class="dlg-ic">i</div><h3>No changes to save</h3><p>Everything is the same as what's already saved on your account.</p>${MF('<button class="btn" onclick="modal()">OK</button>')}</div>`);
@@ -868,9 +942,79 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
             : [["about", "About us"]],
         );
         $("#app").innerHTML =
-          `<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#${k}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}</nav><button class="btn" onclick="B={step:0};go('book')">Book Appointment</button> ${U ? `<button class="btn w sm" onclick="doLogout()">Log out</button>` : `<button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span><small>© 2026 Fairytale Nails Salon</small></footer>`;
+          `<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#/${ROUTES[k]}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}${U ? `<a class="navout" href="#/" onclick="event.preventDefault();askLogout()">Log out</a>` : ""}</nav><button class="btn" onclick="B={step:0};clearDraft();go('book')">Book Appointment</button>${U ? "" : ` <button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span>${contactHtml()}<small>© 2026 Fairytale Nails Salon</small></footer>`;
         if (y) window.scrollTo(0, y); // same-page updates keep your place; go() scrolls to top on page changes
+        syncUrl();
       }
+
+      // TC-20: keeps the address bar in step with the screen. New screens add a history entry; corrections replace it.
+      function routeOf() {
+        if (WANT) return "bookings/" + encodeURIComponent(WANT.code) + "/" + WANT.kind;
+        if (P === "book" && PAY) { const a = DB.appts.find((x) => x.id === PAY.id); return a ? "bookings/" + encodeURIComponent(a.code) + "/pay" : "book"; }
+        if (P === "mine" && RSC) { const a = DB.appts.find((x) => x.id === RSC.id); return a ? "bookings/" + encodeURIComponent(a.code) + "/reschedule" : "appointments"; }
+        if (P === "book" && !B.done && B.step > 0) return "book/" + STEPS[B.step];
+        return ROUTES[P] ?? "";
+      }
+      const cleanSearch = () => {
+        const q = new URLSearchParams(location.search);
+        ["fbclid", "gclid"].forEach((k) => q.delete(k)); // ad-click tags would make every page's address look the same
+        const s = q.toString();
+        return s ? "?" + s : "";
+      };
+      function syncUrl() {
+        if (P === "book" && !PAY) saveDraft();
+        if (PAY) { try { sessionStorage.setItem("ft_payopt_" + PAY.id, PAY.opt || "down"); } catch (e) { /* not kept across a refresh */ } }
+        const r = routeOf();
+        if (r === ROUTE_NOW && !/[?&](fbclid|gclid)=/.test(location.search)) return;
+        const url = location.pathname + cleanSearch() + (r ? "#/" + r : "");
+        try { history[ROUTE_NOW === null || ROUTE_REPLACE ? "replaceState" : "pushState"](null, "", url); } catch (e) { /* the page still works without addresses */ }
+        ROUTE_NOW = r;
+      }
+      function saveDraft() {
+        try {
+          if (!B.sel || !B.sel.length || B.done) return sessionStorage.removeItem(DRAFT_KEY);
+          const { sel, tech, date, slot, step, cat, ds, mo, opt, name, phone, email, notes } = B;
+          sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ sel, tech, date, slot, step, cat, ds, mo, opt, name, phone, email, notes }));
+        } catch (e) { /* private mode: the booking isn't kept across a refresh */ }
+      }
+      function clearDraft() { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* nothing saved */ } }
+      // Opens the booking a #/bookings/<code>/… address points to, once your appointments are loaded.
+      function resolveWant() {
+        if (!WANT || !U) return;
+        const w = WANT, a = DB.appts.find((x) => x.code === w.code);
+        WANT = null;
+        if (!a) { P = "mine"; return; }
+        if (w.kind === "pay") {
+          let o = "down";
+          try { o = sessionStorage.getItem("ft_payopt_" + a.id) || "down"; } catch (e) { /* default */ }
+          PAY = { id: a.id, opt: o, exp: a.exp, file: null, err: "" };
+          P = "book";
+        } else {
+          P = "mine";
+          RSC = canMove(a) ? { id: a.id, tech: a.staff || 0, date: null, slot: null, ds: 0, warn: "" } : null;
+        }
+      }
+      function afterLogin() {
+        if (WANT) { resolveWant(); render(); scrollTo(0, 0); return; }
+        const nx = LOGIN_NEXT;
+        LOGIN_NEXT = null;
+        go(nx || (B.sel && B.sel.length ? "book" : "mine")); // continue where you were before logging in
+      }
+      // Browser Back / Forward: show the screen that address belongs to.
+      addEventListener("popstate", () => {
+        const was = P, keep = WANT;
+        WANT = null;
+        if (!applyRoute(location.hash)) { WANT = keep; return; } // e.g. an in-page #anchor: stay put
+        if (!WANT) { PAY = null; RSC = null; }
+        if (!BOOTED) return;
+        modal();
+        ROUTE_NOW = location.hash.replace(/^#\/?/, "");
+        resolveWant();
+        ROUTE_REPLACE = true;
+        render();
+        ROUTE_REPLACE = false;
+        if (P !== was) scrollTo(0, 0);
+      });
 
       /* ================= Supabase data layer ================= */
       const SL = {}; // availability cache: "date|duration|tech" -> minutes[]
@@ -892,6 +1036,11 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
       }
       const clearSlots = () => Object.keys(SL).forEach((k) => delete SL[k]);
       const manila = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+      // The customer's latest GCash / Maya receipt payment with the given status.
+      function latestPay(r, status) {
+        const p = (r.payments || []).filter((x) => x.provider === "manual" && x.status === status).sort((x, y) => String(y.created_at || "").localeCompare(String(x.created_at || "")))[0];
+        return p ? { amount: +p.amount, method: p.method, opt: p.pay_option, path: p.receipt_path || "", reason: p.reject_reason || "" } : null;
+      }
       function mapAppt(r) {
         const p = Object.fromEntries(manila.formatToParts(new Date(r.start_at)).map((x) => [x.type, x.value]));
         const dur = Math.round((new Date(r.end_at) - new Date(r.start_at)) / 6e4),
@@ -908,6 +1057,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           paid: (r.payments || []).filter((x) => ["paid", "partially_refunded"].includes(x.status)).reduce((t, x) => t + +x.amount, 0),
           req: reqOf(r),
           sent: (r.payments || []).filter((x) => x.provider === "manual" && x.status === "pending").reduce((t, x) => t + +x.amount, 0),
+          sentPay: latestPay(r, "pending"), rej: (latestPay(r, "failed") || {}).reason || "",
           status: r.status === "held" ? (receiptSent(r) ? "verifying" : "pending") : r.status, exp: r.status === "held" && !receiptSent(r) ? r.hold_expires_at : null, staff: r.technician_id || 0, hist: [],
         };
       }
@@ -965,9 +1115,9 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           Object.keys(GN).forEach((k) => delete GN[k]);
           Object.assign(GN, c.GN);
           DB.SV = c.SV; TE.splice(0, TE.length, ...c.TE);
-          DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode; DB.hold = c.holdMinutes || 5; DB.pay = c.pay || {};
+          DB.hours = c.hours; DB.openDays = c.openDays; DB.off = c.off; DB.deposit = c.depositAmount; DB.test = c.testMode; DB.hold = c.holdMinutes || 15; DB.pay = c.pay || {}; if (c.contact) DB.contact = c.contact;
           tab = GR[0];
-          if (P !== "reset" && (await api.currentUser())) { await startSession(); await resumePayment(); }
+          if (P !== "reset" && (await api.currentUser())) { await startSession(); await resumePayment(); resolveWant(); }
         } catch (e) {
           console.error(e);
           if (quick) return; // the page is already showing the bundled defaults
@@ -986,7 +1136,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         try {
           await FN.signIn(u, w);
           if (!(await startSession())) return err("This account is for salon staff. Please sign in through the staff page.");
-          go(B.sel && B.sel.length ? "book" : "mine"); // came from "Book" on the price list: continue that booking
+          afterLogin();
         } catch (e) { err(e.message); }
       }
       async function doSignup() {
@@ -1002,15 +1152,17 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           const r = await FN.signUp({ email: e, password: w, phone: p, fullName: n });
           if (!r.session) return ($("#ae").innerHTML = '<div class="msg ok">Account created. Check your email to confirm it, then log in.</div>');
           await startSession();
-          go("mine");
+          afterLogin();
         } catch (x) {
           const m = (x.message || "").toLowerCase();
           err(m.includes("already registered") || m.includes("already exists") ? "An account with this email already exists. Log in instead." : x.message);
         }
       }
+      // Log out sits away from "Book Appointment" and asks first, so it can't be hit by accident (TC-21).
+      const askLogout = () => ask("Log out?", "<p>You'll need to log in again to book or to see your appointments.</p>", "Log out", "modal();doLogout()", "Stay logged in");
       async function doLogout() {
         if (unwatch) unwatch(); unwatch = null;
-        await FN.signOut(); U = null; DB.appts = []; B = { step: 0 }; go("home");
+        await FN.signOut(); U = null; DB.appts = []; B = { step: 0 }; clearDraft(); go("home");
       }
 
       /* ---------- deposit: TEST mode records it instantly; LIVE mode goes to PayMongo and waits for the webhook ---------- */
@@ -1047,6 +1199,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           await loadAppts();
           const opt = B.opt || "down";
           B = { step: 0 };
+          clearDraft();
           return openPay(a.id, opt);
         } catch (e) {
           B.busy = false;
@@ -1056,7 +1209,11 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         }
         render();
       }
-      function payHold(id) { openPay(id, "down"); }
+      function payHold(id) {
+        let o = "down"; // the choice made while booking (down or full), if this tab remembers it
+        try { o = sessionStorage.getItem("ft_payopt_" + id) || "down"; } catch (e) { /* default */ }
+        openPay(id, o);
+      }
       /* ---------- pay & upload receipt: GCash / Maya outside the site, staff verify the screenshot ---------- */
       let PAY = null; // { id, opt, exp, file, err, busy, sent, expired }
       const payOpt = (v, cur, t, d, amt, target) =>
@@ -1066,31 +1223,84 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         PAY = { id, opt: opt || "down", exp: a && a.exp, file: null, err: "" };
         P = "book"; render(); scrollTo(0, 0);
       }
-      const payAmt = (a) => (PAY.opt === "full" ? Math.max(a.price, DB.deposit) : DB.deposit);
+      const payAmt = (a) => (PAY.opt === "full" ? fullFor(a.price) : downFor(a.price));
+      const RCPT = {}; // receipt file -> short-lived link for the preview
+      // Preview of the receipt the customer sent: the file just picked, or the stored copy after a refresh (TC-15).
+      function rcptHtml(sp) {
+        const local = PAY && PAY.file ? PAY.file : null, path = (sp && sp.path) || "";
+        const pdf = local ? local.type === "application/pdf" : /\.pdf$/i.test(path);
+        let url = "";
+        if (local) url = PAY.fileUrl || (PAY.fileUrl = URL.createObjectURL(local));
+        else if (path) {
+          if (!(path in RCPT)) {
+            RCPT[path] = "";
+            (FN.raw || FN).receiptUrl(path)
+              .then((u) => (RCPT[path] = u), () => (RCPT[path] = null))
+              .then(() => { if (P === "book" && PAY && !$("#md").innerHTML) render(); });
+          }
+          url = RCPT[path];
+        }
+        if (!url) return `<p class="mute">${url === "" && path ? "Loading your receipt…" : "The receipt preview isn't available right now."}</p>`;
+        return pdf
+          ? `<p><a class="btn w sm" href="${esc(url)}" target="_blank" rel="noopener">Open your receipt (PDF)</a></p>`
+          : `<a href="${esc(url)}" target="_blank" rel="noopener"><img class="rcptimg" src="${esc(url)}" alt="Your payment receipt"></a>`;
+      }
+      // TC-11 / TC-12: only JPG, PNG, WEBP, HEIC or PDF files up to 10 MB. "Send receipt" stays off until a good file is chosen.
+      function pickRcpt(el) {
+        const f = el.files && el.files[0];
+        PAY.err = ""; PAY.file = null; PAY.fileUrl = null;
+        if (f) {
+          if (!/^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/.test(f.type)) PAY.err = "That file type isn't accepted. Upload a JPG, PNG or WEBP image, or a PDF.";
+          else if (f.size > 10 * 1024 * 1024) PAY.err = `That file is ${(f.size / 1048576).toFixed(1)} MB. Receipts must be 10 MB or smaller.`;
+          else PAY.file = f;
+        }
+        render();
+      }
       function payView() {
         const a = DB.appts.find((x) => x.id === PAY.id), done = () => "PAY=null;B={step:0};go('mine')";
-        if (PAY.sent || (a && a.status === "verifying"))
-          return W(`<h2>Receipt sent</h2><div class="card"><p>Thank you! We received your payment receipt for booking <b>${esc(a ? a.code : "")}</b>.</p>${a ? `<p>${esc(a.svc)}<br>${bfl(a.date)} at ${m2t(a.start)}</p>` : ""}<p><b>Status: Waiting for confirmation.</b> The salon will check your payment and confirm your booking. You can follow it in My Appointments.</p></div><p><button class="btn" onclick="${done()}">View my appointments</button></p>`);
+        if (PAY.sent || (a && a.status === "verifying")) {
+          const sp = (a && a.sentPay) || {}, help = contactHtml("stack");
+          return W(`<h2>Receipt sent</h2><div class="card"><p style="margin-top:0">Thank you! We received your payment receipt.</p><dl class="sumlist"><dt>Booking number</dt><dd><b>${esc(a ? a.code : "")}</b></dd>${a ? `<dt>Services</dt><dd>${esc(a.svc)}</dd><dt>Date &amp; time</dt><dd>${bfl(a.date)} at ${m2t(a.start)}</dd><dt>Nail technician</dt><dd>${a.staff ? esc(te(a.staff)) : "Any available technician (the salon assigns one)"}</dd>` : ""}<dt>Amount sent</dt><dd><b>${php(sp.amount || (a ? payAmt(a) : 0))}</b> · ${(sp.opt || PAY.opt) === "full" ? "full payment" : "down payment"} by ${(sp.method || PAY.method) === "maya" ? "Maya" : "GCash"}</dd><dt>Status</dt><dd>${pill("verifying")}</dd></dl>
+<h3 class="payh">Your receipt</h3>${rcptHtml(sp)}
+<h3 class="payh">When will it be confirmed?</h3><p style="margin:0">The salon checks receipts during opening hours: ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}. Receipts sent outside those hours are checked when the salon opens. You'll see the update in My Appointments.</p>${help ? `<h3 class="payh">Questions about your payment?</h3>${help}` : ""}</div><p><button class="btn" onclick="${done()}">View my appointments</button></p>`, 720);
+        }
+        if (a && ["confirmed", "waiting", "service", "completed"].includes(a.status))
+          return W(`<h2>Payment confirmed</h2><div class="card"><p style="margin-top:0">The salon has checked your payment. Booking <b>${esc(a.code)}</b> is confirmed.</p><p style="margin:0">${esc(a.svc)}<br>${bfl(a.date)} at ${m2t(a.start)}${a.staff ? " with " + esc(te(a.staff)) : ""}</p></div><p><button class="btn" onclick="${done()}">View my appointments</button></p>`);
+        if (a && a.status === "cancelled" && a.rej)
+          return W(`<h2>Payment not accepted</h2><div class="card"><p style="margin-top:0">The salon couldn't confirm your payment for booking <b>${esc(a.code)}</b>: ${esc(a.rej)}.</p><p style="margin:0">The time slot was released. Please book again, or contact the salon if you think this is a mistake.</p>${contactHtml("stack")}</div><p><button class="btn" onclick="PAY=null;B={step:0};go('book')">Book again</button> <button class="btn w" onclick="${done()}">My appointments</button></p>`);
         if (!a || PAY.expired || a.status !== "pending")
-          return W(`<h2>Your reserved time ran out</h2><div class="card"><p>We did not receive a receipt within ${DB.hold} minutes, so the time slot was released. Please book again. If you already sent money, contact the salon with your receipt.</p></div><p><button class="btn" onclick="PAY=null;B={step:0};go('book')">Book again</button> <button class="btn w" onclick="${done()}">My appointments</button></p>`);
+          return W(`<h2>Your reserved time ran out</h2><div class="card"><p>We did not receive a receipt within ${DB.hold} minutes, so the time slot was released. Please book again. If you already sent money, contact the salon with your receipt.</p>${contactHtml("stack")}</div><p><button class="btn" onclick="PAY=null;B={step:0};go('book')">Book again</button> <button class="btn w" onclick="${done()}">My appointments</button></p>`);
         if (a.price <= DB.deposit) PAY.opt = "full";
-        const pay = DB.pay || {}, amt = payAmt(a),
-          acct = (n, nm, num) => num ? `<div class="payacct"><b>${n}</b><br><small>${esc(nm)}</small><br><span class="paynum">${esc(num)}</span> <button class="btn sm w" type="button" onclick="copyNum('${esc(num)}',this)">Copy</button></div>` : "",
+        const pay = DB.pay || {}, amt = payAmt(a), hasPay = !!(pay.gcashNumber || pay.mayaNumber || pay.qrUrl),
+          acct = (n, nm, num) => (num ? `<div class="payacct"><b>${n}</b>${nm ? `<br><small>Account name: ${esc(nm)}</small>` : ""}<br><span class="paynum">${esc(fmtPhone(num))}</span> <button class="btn sm w" type="button" onclick="copyNum('${esc(num)}',this)">Copy number</button></div>` : ""),
           details = acct("GCash", pay.gcashName, pay.gcashNumber) + acct("Maya", pay.mayaName, pay.mayaNumber),
           methods = [["gcash", "GCash"], ["maya", "Maya"]].filter(([k]) => !(pay.gcashNumber || pay.mayaNumber) || pay[k + "Number"]);
         return W(`<h2>Pay &amp; upload your receipt</h2>
-<div class="card"><div class="row"><span>Booking <b>${esc(a.code)}</b><br><small>${esc(a.svc)} · ${bfl(a.date)} at ${m2t(a.start)}</small></span><span class="paytimer" aria-live="polite">Time left <b id="paycd">${cdText()}</b></span></div></div>
-<h3 class="payh">1. Amount to pay</h3><div class="sg">${a.price <= DB.deposit ? "" : payOpt("down", PAY.opt, "Down payment", "Pay the rest at the salon.", DB.deposit, "PAY.opt")}${payOpt("full", PAY.opt, "Full payment", "Pay the estimated total now.", Math.max(a.price, DB.deposit), "PAY.opt")}</div>
-<h3 class="payh">2. Send ${php(amt)}</h3><div class="card payto">${pay.qrUrl ? `<img class="payqr" src="${esc(pay.qrUrl)}" alt="Salon payment QR code">` : ""}<div>${details || '<p class="mute" style="margin:0">Send the payment to the salon\'s GCash or Maya account.</p>'}${pay.note ? `<p class="mute" style="margin:.6rem 0 0">${esc(pay.note)}</p>` : ""}<p class="mute" style="margin:.6rem 0 0">Please put your booking number <b>${esc(a.code)}</b> in the message, if your app allows it.</p></div></div>
-<h3 class="payh">3. Upload your receipt</h3><div class="card"><label for="pm">Paid with</label><select id="pm" onchange="PAY.method=this.value">${methods.map(([k, l]) => `<option value="${k}" ${(PAY.method || methods[0][0]) === k ? "selected" : ""}>${l}</option>`).join("")}</select><label for="pf">Screenshot or photo of your receipt</label><input id="pf" type="file" accept="image/jpeg,image/png,image/webp,image/heic" onchange="PAY.file=this.files[0]||null;PAY.err='';render()"><small class="fhint">${PAY.file ? "Selected: " + esc(PAY.file.name) : "Make sure the amount and reference number are clearly visible."}</small>${PAY.err ? `<div class="msg">${esc(PAY.err)}</div>` : ""}<p style="margin-bottom:0"><button class="btn" ${PAY.busy ? "disabled" : ""} onclick="sendReceipt()">${PAY.busy ? "Sending..." : "Send receipt"}</button> <button class="btn w" onclick="${done()}">Pay later</button></p></div>`, 720);
+<div class="card"><div class="row"><span>Booking <b>${esc(a.code)}</b><br><small>${esc(a.svc)} · ${bfl(a.date)} at ${m2t(a.start)}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small></span><span class="paytimer" aria-live="polite">Time left <b id="paycd">${cdText()}</b></span></div></div>
+<h3 class="payh">1. Amount to pay</h3>${a.price <= DB.deposit
+  ? `<div class="card paysum"><div class="row"><span><b>Full payment</b><br><small>Your booking total is less than the ₱${DB.deposit} down payment, so you pay the full amount now.</small></span><b class="pr">${php(fullFor(a.price))}</b></div></div>`
+  : `<div class="sg">${payOpt("down", PAY.opt, "Down payment", "Pay the rest at the salon.", downFor(a.price), "PAY.opt")}${payOpt("full", PAY.opt, "Full payment", "Pay the estimated total now.", fullFor(a.price), "PAY.opt")}</div>`}
+<h3 class="payh">2. Send ${php(amt)}</h3>${hasPay ? `<div class="card payto">${pay.qrUrl ? `<img class="payqr" src="${esc(pay.qrUrl)}" alt="Salon payment QR code">` : ""}<div>${details || '<p class="mute" style="margin:0">Scan the QR code with GCash or Maya.</p>'}${pay.note ? `<p class="mute" style="margin:.6rem 0 0">${esc(pay.note)}</p>` : ""}<p class="mute" style="margin:.6rem 0 0">Please put your booking number <b>${esc(a.code)}</b> in the message, if your app allows it.</p></div></div>` : `<div class="msg">The salon hasn't added its GCash or Maya details yet, so please don't send money yet. Contact the salon to arrange your payment.${contactHtml("stack")}</div>`}
+<h3 class="payh">3. Upload your receipt</h3><div class="card"><label for="pm">Paid with</label><select id="pm" onchange="PAY.method=this.value">${methods.map(([k, l]) => `<option value="${k}" ${(PAY.method || methods[0][0]) === k ? "selected" : ""}>${l}</option>`).join("")}</select><label for="pf">Screenshot, photo or PDF of your receipt</label><input id="pf" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" onchange="pickRcpt(this)"><small class="fhint">${PAY.file ? "Selected: " + esc(PAY.file.name) : "JPG, PNG, WEBP or PDF, up to 10 MB. Make sure the amount and reference number are clearly visible."}</small>${PAY.err ? `<div class="msg">${esc(PAY.err)}</div>` : ""}<p style="margin-bottom:0"><button class="btn" ${PAY.busy || !PAY.file ? "disabled" : ""} onclick="sendReceipt()">${PAY.busy ? "Sending..." : "Send receipt"}</button> <button class="btn w" onclick="${done()}">Pay later</button></p>${PAY.file || PAY.busy ? "" : '<small class="mute">Choose your receipt above to turn on Send receipt.</small>'}</div>`, 720);
       }
-      function cdText() {
-        const left = PAY && PAY.exp ? new Date(PAY.exp) - Date.now() : 0;
-        if (left <= 0) return "0:00";
-        const t = Math.ceil(left / 1000);
+      // "m:ss" until a server-set expiry time (the clock survives a refresh because it comes from the database).
+      const timeLeft = (iso) => {
+        const ms = iso ? new Date(iso) - Date.now() : 0;
+        if (!(ms > 0)) return "0:00";
+        const t = Math.ceil(ms / 1000);
         return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
-      }
+      };
+      function cdText() { return timeLeft(PAY && PAY.exp); }
+      let CD_REFRESH = false;
       setInterval(() => {
+        // My Appointments: live "time left to pay" on bookings waiting for a receipt (TC-14)
+        document.querySelectorAll(".cdx").forEach((el) => {
+          el.textContent = timeLeft(el.dataset.exp);
+          if (new Date(el.dataset.exp) - Date.now() <= 0 && !CD_REFRESH) {
+            CD_REFRESH = true; // the server releases the slot within a minute, then the card shows the new status
+            setTimeout(async () => { try { await loadAppts(true); } catch (e) { /* try again later */ } CD_REFRESH = false; if (P === "mine" && !$("#md").innerHTML) render(); }, 60000);
+          }
+        });
         if (!PAY || PAY.sent || PAY.expired || PAY.busy || !PAY.exp) return;
         const el = document.getElementById("paycd");
         if (el) el.textContent = cdText();
@@ -1104,6 +1314,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (!PAY || PAY.busy) return;
         if (!PAY.file) { PAY.err = "Choose a screenshot or photo of your receipt first."; return render(); }
         const el = $("#pm"), method = (el && el.value) || "gcash";
+        PAY.method = method;
         PAY.busy = true; PAY.err = ""; render();
         try {
           await FN.submitReceipt(PAY.id, PAY.file, PAY.opt, method);
@@ -1131,10 +1342,11 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         const rq = !live ? "" : a.req.status === "pending"
           ? `<div class="msg ok" style="margin:.5rem 0 0">Reschedule requested: <b>${esc(reqWhen(a.req))}</b>. Waiting for the salon to approve. Your current time stays booked until then.</div>`
           : `<div class="msg" style="margin:.5rem 0 0">Your request to move to ${esc(reqWhen(a.req))} was declined${a.req.reason ? ": " + esc(a.req.reason) : ""}. Your original time is kept.</div>`;
-        const note = a.status === "pending" ? "<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>"
+        const note = a.status === "pending" ? (a.exp ? `<small>Pay and upload your receipt within <b class="cdx" data-exp="${esc(a.exp)}">${timeLeft(a.exp)}</b>, or the time slot is released.</small>` : "<small>Your time slot is held for a few minutes until you upload your payment receipt.</small>")
           : past && ["confirmed", "verifying", "waiting", "service"].includes(a.status) ? "<small>This appointment time has passed. It will move to Completed once the salon marks your visit as done.</small>"
           : a.status === "verifying" ? "<small>We received your receipt. The salon will confirm your booking once they have checked the payment.</small>" : "";
-        return `${rq}<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
+        const rej = a.status === "cancelled" && a.rej ? `<div class="msg" style="margin:.5rem 0 0">Payment not accepted: ${esc(a.rej)}. The time slot was released. Please book again or contact the salon.</div>` : "";
+        return `${rq}${rej}<p class="row" style="justify-content:flex-start;gap:.4rem;margin:.5rem 0 0">${b.join("")}</p>${note}`;
       }
       async function apptDetails(id) {
         const a = DB.appts.find((x) => x.id === id);
@@ -1143,7 +1355,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         try { H = await FN.myAppointmentHistory(id); } catch (e) { /* details still show without the timeline */ }
         const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : "");
         const when = (iso) => new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        modal(`<h3>Appointment details</h3><p style="margin-top:0">${pill(a.status)}</p><dl class="sumlist">${row("Booking number", "<b>" + esc(a.code) + "</b>")}${row("Services", esc(a.svc))}${row("Date & time", bfl(a.date) + " at " + m2t(a.start) + " to " + m2t(a.start + a.dur))}${row("Duration", a.estD)}${row("Technician", a.staff ? esc(te(a.staff)) : "Any available technician")}${row(a.status === "completed" ? "Total" : "Estimated price", a.estP || php(a.price))}${row("Paid", a.paid ? php(a.paid) : "")}${a.req && a.req.status === "pending" ? row("Requested new time", esc(reqWhen(a.req)) + " <small>(waiting for approval)</small>") : ""}${row("Waiting to be checked", a.sent ? php(a.sent) : "")}${row("Notes", esc(a.notes))}</dl>${H.length ? `<h3 style="font-size:1rem;margin:1rem 0 .3rem">History</h3>${H.map((h) => `<div style="border-top:1px solid var(--line);padding:.4rem 0"><small class="mute">${when(h.created_at)}</small><br>${esc(h.action)}</div>`).join("")}` : ""}${MF(`${canMove(a) ? `<button class="btn w" onclick="modal();openResched('${a.id}')">Reschedule</button>` : ""}<button class="btn" onclick="modal()">Close</button>`)}`);
+        modal(`<h3>Appointment details</h3><p style="margin-top:0">${pill(a.status)}</p><dl class="sumlist">${row("Booking number", "<b>" + esc(a.code) + "</b>")}${row("Services", esc(a.svc))}${row("Date & time", bfl(a.date) + " at " + m2t(a.start) + " to " + m2t(a.start + a.dur))}${row("Duration", a.estD)}${row("Technician", a.staff ? esc(te(a.staff)) : "Any available technician")}${row(a.status === "completed" ? "Total" : "Estimated price", a.estP || php(a.price))}${row("Paid", a.paid ? php(a.paid) : "")}${a.req && a.req.status === "pending" ? row("Requested new time", esc(reqWhen(a.req)) + " <small>(waiting for approval)</small>") : ""}${row("Waiting to be checked", a.sent ? php(a.sent) : "")}${row("Notes", esc(a.notes))}${a.status === "cancelled" && a.rej ? row("Payment not accepted", esc(a.rej)) : ""}</dl>${["pending", "verifying", "confirmed"].includes(a.status) ? `<p class="mute policy"><small><b>Changes and cancellations:</b> ${POLICY}</small></p>` : ""}${H.length ? `<h3 style="font-size:1rem;margin:1rem 0 .3rem">History</h3>${H.map((h) => `<div style="border-top:1px solid var(--line);padding:.4rem 0"><small class="mute">${when(h.created_at)}</small><br>${esc(h.action)}</div>`).join("")}` : ""}${MF(`${canMove(a) ? `<button class="btn w" onclick="modal();openResched('${a.id}')">Reschedule</button>` : ""}<button class="btn" onclick="modal()">Close</button>`)}`);
       }
       let RSC = null; // reschedule in progress: { id, tech, date, slot, ds, warn }
       function openResched(id) {
@@ -1161,7 +1373,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           grp = [["Morning", (x) => x < 720], ["Afternoon", (x) => x >= 720 && x < 1020], ["Evening", (x) => x >= 1020]];
         return W(`<h2>Reschedule appointment</h2><div class="card"><small>Current booking · ${esc(a.code)}</small><br><b>${esc(a.svc)}</b><br><small>${bfl(a.date)} at ${m2t(a.start)} · ${a.estD}${a.staff ? " · with " + esc(te(a.staff)) : ""}</small></div>
 <label for="rs_t">Technician</label><select id="rs_t" onchange="RSC.tech=+this.value;RSC.slot=null;RSC.warn='';render()"><option value="0">Any available technician</option>${TE.map((t) => `<option value="${t.id}" ${RSC.tech === t.id ? "selected" : ""}>${esc(t.n)} · ${esc(t.sp)}</option>`).join("")}</select>
-<h3 style="margin:1rem 0 .3rem">Pick a new date and time</h3><div class="row" style="margin-top:.6rem"><button class="btn sm w" ${RSC.ds ? "" : "disabled"} onclick="RSC.ds--;render()" aria-label="Previous week">‹</button><b>${bfl(fmt(days[0]))} to ${bfl(fmt(days[6]))}</b><button class="btn sm w" ${RSC.ds >= 7 ? "disabled" : ""} onclick="RSC.ds++;render()" aria-label="Next week">›</button></div><div class="dstrip">${days.map((d) => { const iso = fmt(d); return `<button class="chip ${RSC.date === iso ? "on" : ""}" ${free(iso, a.dur, 0, RSC.tech).length ? "" : "disabled"} onclick="RSC.date='${iso}';RSC.slot=null;RSC.warn='';render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b></button>`; }).join("")}</div>${RSC.warn ? `<div class="msg">${esc(RSC.warn)}</div>` : ""}${RSC.date ? grp.map(([n, fn]) => { const L = f.filter(fn); return L.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .2rem">${n}</h3><div class="chips" style="margin-top:0">${L.map((t) => `<button class="chip ${RSC.slot === t ? "on" : ""}" onclick="RSC.slot=${t};RSC.warn='';render()">${m2t(t)}</button>`).join("")}</div>` : ""; }).join("") || '<div class="msg">No times left that day. Pick another day.</div>' : '<p class="mute">Pick a day to see the available times.</p>'}
+<h3 style="margin:1rem 0 .3rem">Pick a new date and time</h3><div class="row" style="margin-top:.6rem"><button class="btn sm w" ${RSC.ds ? "" : "disabled"} onclick="RSC.ds--;render()" aria-label="Previous week">‹</button><b>${bfl(fmt(days[0]))} to ${bfl(fmt(days[6]))}</b><button class="btn sm w" ${RSC.ds >= 7 ? "disabled" : ""} onclick="RSC.ds++;render()" aria-label="Next week">›</button></div><div class="dstrip">${days.map((d) => { const iso = fmt(d), di = dayInfo(iso, a.dur, RSC.tech); return `<button class="chip ${RSC.date === iso ? "on" : ""}" ${di.ok ? "" : "disabled"} ${di.why ? `title="${di.why}"` : ""} onclick="RSC.date='${iso}';RSC.slot=null;RSC.warn='';render()"><small>${DN[d.getDay()]}</small><br><b>${d.getDate()}</b>${di.tag ? `<small class="why">${di.tag}</small>` : ""}</button>`; }).join("")}</div>${dayNote(days, a.dur, RSC.tech)}${RSC.warn ? `<div class="msg">${esc(RSC.warn)}</div>` : ""}${RSC.date ? grp.map(([n, fn]) => { const L = f.filter(fn); return L.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .2rem">${n}</h3><div class="chips" style="margin-top:0">${L.map((t) => `<button class="chip ${RSC.slot === t ? "on" : ""}" onclick="RSC.slot=${t};RSC.warn='';render()">${m2t(t)}</button>`).join("")}</div>` : ""; }).join("") || '<div class="msg">No times left that day. Pick another day.</div>' : '<p class="mute">Pick a day to see the available times.</p>'}
 <p class="mute">The salon will review your request. Your current time stays booked until they approve it, and your payment and booking number stay the same.</p><p class="row" style="justify-content:flex-start;gap:.6rem"><button class="btn w" onclick="RSC=null;render()">Back</button><button class="btn" ${RSC.slot == null ? 'disabled style="opacity:.4"' : ""} onclick="askResched()">Request new time</button></p>`, 720);
       }
       function askResched() {
@@ -1181,8 +1393,13 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
           render();
         }
       }
-      const askCancel = (id) =>
-        modal(`<h3>Cancel this appointment?</h3><p>Your ₱${DB.deposit} reservation deposit may be forfeited if you cancel.</p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="askCancel2('${id}')">Cancel</button>`)}`);
+      // TC-16: the rules for changing a booking, shown wherever a customer can change one.
+      const POLICY = "You can reschedule online up to 2 hours before your appointment (the salon approves the new time) and cancel online any time before it starts. While the salon is checking your payment, or within 2 hours of your appointment, please contact the salon instead.";
+      const askCancel = (id) => {
+        const a = DB.appts.find((x) => x.id === id);
+        const money = !a || a.status === "pending" ? "You haven't sent a payment for this booking, so nothing is charged." : `Your ${php(a.paid || downFor(a.price))} payment may be forfeited if you cancel.`;
+        modal(`<h3>Cancel this appointment?</h3><p>${money}</p><p class="mute"><small>${POLICY}</small></p>${MF(`<button class="btn w" onclick="modal()">Keep appointment</button><button class="btn" onclick="askCancel2('${id}')">Cancel</button>`)}`);
+      };
       // Second check so a booking is never cancelled by a stray tap.
       function askCancel2(id) {
         const a = DB.appts.find((x) => x.id === id);

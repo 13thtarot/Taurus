@@ -36,6 +36,10 @@ export async function loadCatalog() {
       note: settings.pay_note || "", qrPath: settings.pay_qr_path || "",
       qrUrl: settings.pay_qr_path ? sb.storage.from("salon-gallery").getPublicUrl(settings.pay_qr_path).data.publicUrl : "",
     },
+    contact: !("salon_address" in settings) ? null : {
+      address: settings.salon_address || "", phone: settings.salon_phone || "", email: settings.salon_email || "",
+      facebook: settings.salon_facebook || "", instagram: (settings.salon_instagram || "").replace(/^@/, ""),
+    },
   };
 }
 

@@ -898,3 +898,23 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 .paynum { font-size: 1.15rem; font-weight: 600; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 .payh { margin: 1.4rem 0 .5rem; }
 .payto > div { flex: 1 1 220px; }
+
+/* ---------- test-case fixes ---------- */
+/* TC-05: reason under a greyed-out day, and the note that explains it */
+.dstrip .chip .why { display: block; font-size: .6rem; line-height: 1.15; margin-top: .1rem; white-space: nowrap; }
+.dstrip .chip:disabled { opacity: .5; }
+.daynote { margin: .2rem 0 .6rem; color: var(--mute); }
+/* TC-04 / TC-01: single-amount payment summary */
+.paysum .row { align-items: center; }
+/* TC-15: receipt preview after sending */
+.rcptimg { display: block; max-width: 100%; max-height: 360px; object-fit: contain; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+/* TC-21 / TC-15: salon contact details */
+.contact { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .85rem; }
+.contact a { color: inherit; text-decoration: none; border-bottom: 1px dotted currentColor; }
+.contact.stack { flex-direction: column; align-items: flex-start; gap: .4rem; margin-top: .4rem; }
+/* TC-21: Log out sits with the page links, away from the Book Appointment button */
+.top nav .navout { color: var(--mute); border-left: 1px solid var(--line); padding-left: 1.4rem; }
+.top nav .navout:hover { color: var(--ink); }
+/* TC-16 */
+.policy { margin: .8rem 0 0; }
+.cdx { font-variant-numeric: tabular-nums; }

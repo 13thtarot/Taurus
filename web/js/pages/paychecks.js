@@ -41,12 +41,15 @@ function pckHTML() {
 async function pckView(id) {
   var p = PCK.list.find(function (x) { return x.id === id; });
   if (!p) return;
-  var a = p.appointments, url = "";
+  var a = p.appointments, url = "", pdf = /\.pdf$/i.test(p.receipt_path || "");
   try { url = await FN.receiptUrl(p.receipt_path); } catch (e) { return toast("Could not open the receipt. Please try again."); }
   modal('<h3>Check payment · ' + esc(a.code) + '</h3>' +
     '<p class="mute" style="margin-top:0">' + esc(a.customer_name) + ' · ' + pckWhen(a.start_at) + '<br>Expected <b>' + pckMoney(p.amount) + '</b> by ' + (p.method === "maya" ? "Maya" : "GCash") + ' (' + (p.pay_option === "full" ? "full payment" : "down payment") + ')</p>' +
-    '<a href="' + esc(url) + '" target="_blank" rel="noopener"><img src="' + esc(url) + '" alt="Payment receipt" style="display:block;width:100%;max-height:60vh;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff"></a>' +
-    '<small class="mute">Tap the image to open it full size. Compare the amount and reference number with your GCash / Maya history.</small>' +
+    (pdf
+      ? '<iframe src="' + esc(url) + '" title="Payment receipt (PDF)" style="display:block;width:100%;height:60vh;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>' +
+        '<p style="margin:.4rem 0"><a class="btn w sm" href="' + esc(url) + '" target="_blank" rel="noopener">Open the PDF in a new tab</a></p>'
+      : '<a href="' + esc(url) + '" target="_blank" rel="noopener"><img src="' + esc(url) + '" alt="Payment receipt" style="display:block;width:100%;max-height:60vh;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff"></a>') +
+    '<small class="mute">' + (pdf ? "This receipt is a PDF." : "Tap the image to open it full size.") + ' Compare the amount and reference number with your GCash / Maya history.</small>' +
     MF('<button class="btn w" onclick="modal()">Close</button><button class="btn w" onclick="pckReject(\'' + id + '\')">Reject</button><button class="btn" onclick="pckApprove(\'' + id + '\')">Approve</button>'));
 }
 

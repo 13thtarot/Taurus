@@ -3,19 +3,24 @@ import { sb, must } from "./client.js";
 import { currentUser } from "./auth.js";
 
 const BUCKET = "payment-receipts";
-const OK_TYPES = /^image\/(jpeg|png|webp|heic|heif)$/;
+const OK_TYPES = /^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/;
+export const RECEIPT_MAX_MB = 10;
 
 /** Customer: upload the receipt image, then attach it to the held appointment (stops the 5-minute clock). */
 export async function submitReceipt(appointmentId, file, option, method) {
   if (!file) throw new Error("Choose a photo or screenshot of your receipt.");
-  if (!OK_TYPES.test(file.type)) throw new Error("The receipt must be a photo or screenshot (JPG, PNG or WEBP).");
-  if (file.size > 5 * 1024 * 1024) throw new Error("The receipt image must be under 5 MB.");
+  if (!OK_TYPES.test(file.type)) throw new Error("The receipt must be a JPG, PNG or WEBP image, or a PDF.");
+  if (file.size > RECEIPT_MAX_MB * 1024 * 1024) throw new Error(`The receipt must be ${RECEIPT_MAX_MB} MB or smaller.`);
   const u = await currentUser();
   if (!u) throw new Error("Please log in again.");
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const ext = file.type === "application/pdf" ? "pdf" : (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
   const path = `${u.id}/${appointmentId}/${crypto.randomUUID()}.${ext}`;
   const up = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-  if (up.error) throw new Error("The receipt could not be uploaded. Please try again.");
+  if (up.error) {
+    const m = up.error.message || "";
+    throw new Error(/mime|type/i.test(m) ? "The receipt must be a JPG, PNG or WEBP image, or a PDF."
+      : /size|large/i.test(m) ? `The receipt must be ${RECEIPT_MAX_MB} MB or smaller.` : "The receipt could not be uploaded. Please try again.");
+  }
   return must(await sb.rpc("submit_payment_receipt", { p_appt: appointmentId, p_option: option, p_method: method, p_path: path }));
 }
 
