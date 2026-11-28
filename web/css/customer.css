@@ -925,3 +925,5 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 @media (max-width: 760px) {
   .bkside { position: static; }
 }
+/* Booking review: the note is the only thing typed on this step */
+#b_t { width: 100%; font: inherit; resize: vertical; min-height: 4.5rem; }
