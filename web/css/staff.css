@@ -384,3 +384,19 @@
     
 /* Menu counts (#5): receipts and reschedule requests waiting */
 .nbadge { display: inline-block; min-width: 1.2rem; padding: 0 .35rem; margin-left: .3rem; border-radius: 99px; background: var(--red, #d9534f); color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.2rem; text-align: center; vertical-align: middle; }
+/* "New booking" form for phone / message customers */
+.pb h4 { margin: 1rem 0 .3rem; font-size: .95rem; }
+.pb-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 .8rem; }
+@media (max-width: 560px) { .pb-two { grid-template-columns: 1fr; } }
+.pb-found { display: flex; flex-direction: column; gap: .3rem; margin: .4rem 0; }
+.pb-cust { text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: .45rem .7rem; cursor: pointer; }
+.pb-cust:hover { border-color: var(--deep, #4e6240); }
+.pb-svcs { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin: .4rem 0; }
+.pb-svc { display: flex; align-items: center; gap: .6rem; padding: .45rem .7rem; border-bottom: 1px solid var(--line); margin: 0; font-weight: 400; cursor: pointer; }
+.pb-svc:last-child { border-bottom: 0; }
+.pb-svc input { width: auto; margin: 0; }
+.pb-svc span { flex: 1; }
+.pb .chips { display: flex; gap: .4rem; flex-wrap: wrap; margin: .3rem 0; }
+.pb .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 99px; padding: .3rem .8rem; cursor: pointer; }
+.pb .chip.on { background: var(--deep, #4e6240); color: #fff; border-color: var(--deep, #4e6240); }
+.mc:has(.pb) { max-width: 640px; }

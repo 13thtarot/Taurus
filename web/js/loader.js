@@ -61,6 +61,7 @@
     auditLog: "Loading activity log…",
     appointmentsForDay: "Loading the day's appointments…",
     allAppointments: "Loading all appointments…",
+    staffCreateBooking: "Booking the appointment…",
     walkinQueue: "Loading the walk-in queue…",
     todaysSales: "Loading today's sales…",
     customers: "Searching customers…",

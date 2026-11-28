@@ -611,7 +611,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
           )
           .join(
             "",
-          )}</select>${nAttn ? `<button class="btn sm ${F.s === "attn" ? "" : "w"}" onclick="F.s=F.s==='attn'?'':'attn';render()">${nAttn} not finished</button>` : ""}</div>${F.s === "attn" ? '<p class="mute">Bookings whose day has passed but were never finished. Have staff check them in, bill them and mark them completed, or mark them as no-show.</p>' : ""}<div class="card"><div class="tbl"><table><tr><th>When</th><th>Customer</th><th>Service</th><th>Technician</th><th>Station</th><th>Status</th><th></th></tr>${L.slice(
+          )}</select>${nAttn ? `<button class="btn sm ${F.s === "attn" ? "" : "w"}" onclick="F.s=F.s==='attn'?'':'attn';render()">${nAttn} not finished</button>` : ""}<button class="btn sm" style="margin-left:auto" onclick="pbOpen()">+ New booking</button></div>${F.s === "attn" ? '<p class="mute">Bookings whose day has passed but were never finished. Have staff check them in, bill them and mark them completed, or mark them as no-show.</p>' : ""}<div class="card"><div class="tbl"><table><tr><th>When</th><th>Customer</th><th>Service</th><th>Technician</th><th>Station</th><th>Status</th><th></th></tr>${L.slice(
           0,
           200,
         )
