@@ -612,7 +612,7 @@ ${fams.map(([name, test, blurb]) => {
       const bord = () => ["svc", "tech", "time", "review", "confirm"],
         bidx = (k) => bord().indexOf(k);
       const bsum = () =>
-        `<div class="card" style="position:sticky;top:90px"><b>Your booking</b>${
+        `<div class="card"><b>Your booking</b>${
           sel().length
             ? sel()
                 .map(
@@ -726,8 +726,9 @@ ${fams.map(([name, test, blurb]) => {
             : `<h3>Payment summary</h3><small>You pay by GCash or Maya on the next screen.</small><div class="card paysum" style="margin-top:.6rem"><div class="row"><span><b>Full payment</b><br><small>${lo === hi ? `Your booking total is less than the ₱${DB.deposit} down payment, so you pay the full amount now.` : "You pay the starting price now. Any difference is settled at the salon."}</small></span><b class="pr">${php(fullFor(lo))}</b></div></div>`)
             + `<div class="card" style="margin-top:.8rem"><p style="margin:0">After you confirm, we hold your slot for <b>${DB.hold} minutes</b> while you send the payment and upload your receipt. Your booking is confirmed once the salon has checked your payment.</p></div>${B.err ? `<div class="msg">${B.err}</div>` : ""}<p class="mute">${dn ? "The down payment is deducted from your final bill and may be forfeited if you cancel." : "Your payment is deducted from your final bill and may be forfeited if you cancel."}</p>`;
         }
-        const nav = `<p style="display:flex;gap:.6rem">${B.step ? '<button class="btn w" onclick="B.step--;render()">Back</button>' : ""}${!cont ? "" : k === "review" ? '<button class="btn" onclick="det()">Continue</button>' : k === "confirm" ? `<button class="btn" ${B.busy ? "disabled" : ""} onclick="askSubmit()">${B.busy ? "Please wait..." : "Confirm & continue to payment"}</button>` : `<button class="btn" ${ok ? "" : 'disabled style="opacity:.4"'} onclick="B.step++;render()">Continue</button>`}</p>`;
-        return `<section class="sec"><div class="wrap" style="max-width:980px"><h2>Book an appointment</h2>${prog}<div class="bk"><div>${h}${nav}</div>${bsum()}</div></div></section>`;
+        // Back / Continue sit under the floating "Your booking" card, so they stay in view while you scroll the list.
+        const nav = `<p class="bknav">${B.step ? '<button class="btn w" onclick="B.step--;render();scrollTo(0,0)">Back</button>' : ""}${!cont ? "" : k === "review" ? '<button class="btn" onclick="det()">Continue</button>' : k === "confirm" ? `<button class="btn" ${B.busy ? "disabled" : ""} onclick="askSubmit()">${B.busy ? "Please wait..." : "Confirm & continue to payment"}</button>` : `<button class="btn" ${ok ? "" : "disabled"} onclick="B.step++;render();scrollTo(0,0)">Continue</button>`}</p>`;
+        return `<section class="sec"><div class="wrap" style="max-width:980px"><h2>Book an appointment</h2>${prog}<div class="bk"><div>${h}</div><div class="bkside">${bsum()}${nav}</div></div></div></section>`;
       }
       function det() {
         const val = (id, cur) => { const el = $("#" + id); return (el ? el.value : cur || "").trim(); };

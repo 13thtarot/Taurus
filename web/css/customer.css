@@ -918,3 +918,10 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 /* TC-16 */
 .policy { margin: .8rem 0 0; }
 .cdx { font-variant-numeric: tabular-nums; }
+/* Booking: the summary card and its Back / Continue buttons float together while you scroll */
+.bkside { position: sticky; top: 90px; }
+.bknav { display: flex; gap: .6rem; margin: .8rem 0 0; }
+.bknav .btn { flex: 1; }
+@media (max-width: 760px) {
+  .bkside { position: static; }
+}
