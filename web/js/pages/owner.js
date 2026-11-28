@@ -758,7 +758,7 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         const nm = o ? OWNR().name || OWNR().user : ST.name,
           pg = (PG()[P] || PG().dash)();
         $("#app").innerHTML =
-          `<div class="shell"><aside class="noprint">${logo}<small style="margin:1rem 0 .4rem;letter-spacing:.12em">${o ? "OWNER" : "STAFF"} PORTAL</small>${NAVS[V].map(([k, l]) => `<div class="nv ${P === k ? "on" : ""}" onclick="go('${k}')">${l}</div>`).join("")}<div class="me"><span class="lg" style="font:600 .8rem Poppins">${nm
+          `<div class="shell"><aside class="noprint">${logo}<small style="margin:1rem 0 .4rem;letter-spacing:.12em">${o ? "OWNER" : "STAFF"} PORTAL</small>${NAVS[V].map(([k, l]) => `<div class="nv ${P === k ? "on" : ""}" onclick="go('${k}')">${l}${navCount(k)}</div>`).join("")}<div class="me"><span class="lg" style="font:600 .8rem Poppins">${nm
             .split(" ")
             .map((x) => x[0])
             .join(
@@ -814,15 +814,20 @@ ${inp("py_nt", "Note for customers (optional)", p.note, "e.g. Payments are check
         const p = await FN.myProfile();
         OWNP = { name: p.full_name || p.username || p.email, user: p.username || p.email };
         OW = 1;
-        await Promise.all([loadCatalogData(), loadAppts(), loadStaff(), loadRefunds(), loadGal()]);
+        await Promise.all([loadCatalogData(), loadAppts(), loadStaff(), loadRefunds(), loadGal(), countsLoad()]);
         if (unwatch) unwatch();
         unwatch = FN.watchOwnerBoard(async () => {
-          await Promise.all([loadAppts(true), loadRefunds(true), P === "pay" ? pckLoad(true) : null, P === "resched" ? rsqLoad(true) : null]); // background refresh: no loading screen
+          await Promise.all([loadAppts(true), loadRefunds(true), countsLoad()]); // background refresh: no loading screen
           FINK = "";
           if (P === "rep") { try { const k = RG.f + "|" + RG.t; FIN = await (FN.raw || FN).dashboard(RG.f, RG.t); FINK = k; } catch (e) {} }
           if (OW && !$("#md").innerHTML && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) render();
         });
       }
+      // New receipts and reschedule requests also show up without a refresh, even if live updates are off.
+      setInterval(async () => {
+        if (!OW) return;
+        if ((await countsLoad()) && !$("#md").innerHTML && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) render();
+      }, 60000);
       async function boot() {
         $("#app").innerHTML = ""; // the loading screen is already covering the page
         const rec = await (FN.raw || FN).recoveryFromUrl().catch(() => "expired");

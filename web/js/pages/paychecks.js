@@ -86,6 +86,18 @@ function pckErr(e) {
   return m || "Something went wrong.";
 }
 
+/* ---------- menu counts (#5): how many receipts and reschedule requests are waiting ---------- */
+function navCount(k) {
+  var n = k === "pay" ? PCK.list.length : k === "resched" ? RSQ.list.length : 0;
+  return n ? ' <span class="nbadge" title="' + n + ' waiting">' + n + "</span>" : "";
+}
+// Reloads both lists quietly; true when a count changed (so the page only redraws when needed).
+async function countsLoad() {
+  var before = PCK.list.length + "|" + RSQ.list.length;
+  await Promise.all([pckLoad(true), rsqLoad(true)]);
+  return before !== PCK.list.length + "|" + RSQ.list.length;
+}
+
 /* ---------- "Reschedule requests": customers ask to move a booking; staff approve or decline ---------- */
 var RSQ = { list: [], loaded: false, loading: false, err: "" };
 

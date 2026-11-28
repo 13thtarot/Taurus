@@ -927,3 +927,14 @@ input.bad, select.bad { border-color: var(--red); box-shadow: 0 0 0 3px color-mi
 }
 /* Booking review: the note is the only thing typed on this step */
 #b_t { width: 100%; font: inherit; resize: vertical; min-height: 4.5rem; }
+/* Customer updates (#3): bell with unread count, pop-up note, list of updates */
+.nbadge { display: inline-block; min-width: 1.2rem; padding: 0 .35rem; border-radius: 99px; background: var(--red); color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.2rem; text-align: center; }
+.nbadge[hidden] { display: none; }
+.bell { position: relative; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 99px; padding: .35rem .6rem; cursor: pointer; font-size: 1rem; line-height: 1; }
+.bell .nbadge { position: absolute; top: -.45rem; right: -.5rem; }
+.ntc { position: fixed; right: 1rem; bottom: 1rem; z-index: 50; max-width: 380px; display: flex; gap: .8rem; align-items: center; justify-content: space-between; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: .8rem 1rem; box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: .9rem; }
+.ntc-b { display: flex; gap: .4rem; flex: none; }
+@media (max-width: 480px) { .ntc { left: 1rem; right: 1rem; max-width: none; } }
+.notes { max-height: 60vh; overflow: auto; }
+.note { border-top: 1px solid var(--line); padding: .6rem 0; }
+.note.new { border-left: 3px solid var(--red); padding-left: .6rem; }

@@ -33,10 +33,10 @@ async function loadCat(){const c=await FN.loadCatalog();DB.SV=c.SV.filter(s=>s.o
 async function afterLogin(){
   const p=await FN.myProfile();
   ST={name:p.full_name||p.username||p.email};
-  await Promise.all([loadCat(),loadDay()]);
+  await Promise.all([loadCat(),loadDay(),countsLoad()]);
   if(unwatch)unwatch();
   unwatch=FN.watchStaffBoard(async()=>{ // background refresh: fetch first, then redraw; no loading screen
-    await loadDay(true);if(P==="pay")await pckLoad(true);if(P==="resched")await rsqLoad(true);
+    await loadDay(true);await countsLoad();
     if(ST&&!$("#md").innerHTML&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))render();
   });
 }
@@ -165,9 +165,12 @@ async function saveRef(){
 }
 async function rcpt(sid){
   try{const s=await FN.receipt(sid);
-    modal(`<h3>Receipt ${esc(s.receipt_no||"")}</h3><p class="mute">${esc((s.appointments||{}).code||"Walk-in")}</p><div class="tbl"><table>${(s.sale_items||[]).map(l=>`<tr><td>${esc(l.name)}</td><td style="text-align:right">${php(l.unit_price*l.quantity)}</td></tr>`).join("")}<tr><td>Subtotal</td><td style="text-align:right">${php(s.subtotal)}</td></tr><tr><td><b>Total</b></td><td style="text-align:right"><b>${php(s.total)}</b></td></tr></table></div>${MF('<button class="btn w" onclick="modal()">Close</button><button class="btn" onclick="document.body.classList.add(\'rcp\');print()">Print</button>')}`);
+    modal(`<h3>Receipt ${esc(s.receipt_no||"")}</h3><p class="mute">${esc((s.appointments||{}).code||"Walk-in")}</p><div class="tbl"><table>${(s.sale_items||[]).map(l=>`<tr><td>${esc(l.name)}</td><td style="text-align:right">${php(l.unit_price*l.quantity)}</td></tr>`).join("")}${+s.subtotal!==+s.total?`<tr><td>Subtotal</td><td style="text-align:right">${php(s.subtotal)}</td></tr><tr><td>VAT (${Math.round(+s.tax_rate*100)}%)</td><td style="text-align:right">${php(s.tax_amount)}</td></tr>`:""}<tr><td><b>Total</b></td><td style="text-align:right"><b>${php(s.total)}</b></td></tr>${+s.subtotal===+s.total&&+s.tax_amount>0?`<tr><td><small>VAT included (${Math.round(+s.tax_rate*100)}%)</small></td><td style="text-align:right"><small>${php(s.tax_amount)}</small></td></tr>`:""}</table></div>${MF('<button class="btn w" onclick="modal()">Close</button><button class="btn" onclick="document.body.classList.add(\'rcp\');print()">Print</button>')}`);
   }catch(e){fail(e)}
 }
+
+// New receipts and reschedule requests also show up without a refresh, even if live updates are off.
+setInterval(async()=>{if(!ST)return;if((await countsLoad())&&!$("#md").innerHTML&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))render()},60000);
 
 /* ---------- shell ---------- */
 const go=p=>{P=p;render();scrollTo(0,0)};
@@ -175,7 +178,7 @@ function render(){
   if(!ST){$("#app").innerHTML=plHTML();return}
   const logo='<span class="logo" onclick="go(\'dash\')"><span class="lg">f</span><span><i>fairytale</i><small>NAILS SALON</small></span></span>',
   nm=esc(ST.name),pg=(PG[P]||dash)();
-  $("#app").innerHTML=`<div class="shell"><aside class="noprint">${logo}<small style="margin:1rem 0 .4rem;letter-spacing:.12em">STAFF PORTAL</small>${NAV.map(([k,l])=>`<div class="nv ${P===k?"on":""}" onclick="go('${k}')">${l}</div>`).join("")}<div class="me"><span class="av">${nm.split(" ").map(x=>x[0]).join("").slice(0,2)}</span><span><b>${nm}</b><br><small>Staff</small><br><a class="pr" style="cursor:pointer;font-size:.75rem" onclick="doSignOut()">Sign out</a></span></div></aside><section><div class="bar noprint"><div><span class="ttl" style="font-size:1.4rem">${NAV.find(x=>x[0]===P)[1]}</span><br><small>${new Date().toLocaleDateString("en",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</small></div><span><small>Signed in as</small> <b>${nm}</b></span></div><div class="pad">${pg}</div></section></div>`;
+  $("#app").innerHTML=`<div class="shell"><aside class="noprint">${logo}<small style="margin:1rem 0 .4rem;letter-spacing:.12em">STAFF PORTAL</small>${NAV.map(([k,l])=>`<div class="nv ${P===k?"on":""}" onclick="go('${k}')">${l}${navCount(k)}</div>`).join("")}<div class="me"><span class="av">${nm.split(" ").map(x=>x[0]).join("").slice(0,2)}</span><span><b>${nm}</b><br><small>Staff</small><br><a class="pr" style="cursor:pointer;font-size:.75rem" onclick="doSignOut()">Sign out</a></span></div></aside><section><div class="bar noprint"><div><span class="ttl" style="font-size:1.4rem">${NAV.find(x=>x[0]===P)[1]}</span><br><small>${new Date().toLocaleDateString("en",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</small></div><span><small>Signed in as</small> <b>${nm}</b></span></div><div class="pad">${pg}</div></section></div>`;
 }
 async function boot(){
   $("#app").innerHTML="";

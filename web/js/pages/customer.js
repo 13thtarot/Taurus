@@ -503,7 +503,7 @@
       const services = () => {
         const fams = SVT === "All" ? FAM : FAM.filter((f) => f[0] === SVT);
         return W(
-          `<h2>Services &amp; Prices</h2><p class="mute">Prices in Philippine pesos. A ₱${DB.deposit} down payment (or the full price, if it's lower) holds your slot and is deducted from your bill. Nail art prices are confirmed after the salon reviews your reference design.</p>
+          `<h2>Services &amp; Prices</h2><p class="mute">Prices in Philippine pesos and include VAT. A ₱${DB.deposit} down payment (or the full price, if it's lower) holds your slot and is deducted from your bill. Nail art prices are confirmed after the salon reviews your reference design.</p>
 <div class="svnav" role="tablist">${["All", ...FAM.map((f) => f[0])].map((t) => `<button role="tab" class="chip ${SVT === t ? "on" : ""}" onclick="SVT='${t}';render()">${t}${t === "All" ? "" : ` <small>(${SVA().filter((s) => FAM.find((f) => f[0] === t)[1](s.g || "")).length})</small>`}</button>`).join("")}</div>
 ${fams.map(([name, test, blurb]) => {
             const groups = GR.filter(test).map(groupBlock).join("");
@@ -946,7 +946,7 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
             : [["about", "About us"]],
         );
         $("#app").innerHTML =
-          `<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#/${ROUTES[k]}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}${U ? `<a class="navout" href="#/" onclick="event.preventDefault();askLogout()">Log out</a>` : ""}</nav><button class="btn" onclick="B={step:0};clearDraft();go('book')">Book Appointment</button>${U ? "" : ` <button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span>${contactHtml()}<small>© 2026 Fairytale Nails Salon</small></footer>`;
+          `<header class="top noprint">${logo}<nav>${L.map(([k, l]) => `<a class="${P === k ? "on" : ""}" href="#/${ROUTES[k]}" onclick="event.preventDefault();go('${k}')">${l}</a>`).join("")}${U ? `<a class="navout" href="#/" onclick="event.preventDefault();askLogout()">Log out</a>` : ""}</nav>${U ? `<button class="bell" onclick="openNotes()" title="Updates" aria-label="Updates${unreadN() ? ", " + unreadN() + " new" : ""}">🔔<span class="nbadge" id="bellN" ${unreadN() ? "" : "hidden"}>${unreadN() || ""}</span></button>` : ""}<button class="btn" onclick="B={step:0};clearDraft();go('book')">Book Appointment</button>${U ? "" : ` <button class="btn w sm" onclick="go('login')">Log in</button> <button class="btn sm" onclick="go('signup')">Sign up</button>`}</header><main>${(PG()[P] || home)()}</main><footer class="foot noprint">${logo}<span class="mute">Open ${openTxt()}, ${m2t(DB.hours.o)} to ${m2t(DB.hours.c)}<br>Soft care, thoughtful details, and a little magic, every visit.</span>${contactHtml()}<small>© 2026 Fairytale Nails Salon</small></footer>`;
         if (y) window.scrollTo(0, y); // same-page updates keep your place; go() scrolls to top on page changes
         syncUrl();
       }
@@ -1090,12 +1090,52 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
         if (!ok) return false;
         setU(await FN.myProfile());
         await loadAppts();
+        await loadNotes(true);
         if (unwatch) unwatch();
         unwatch = FN.watchMyBookings(U.id, async () => {
           await loadAppts(true); // background refresh: no loading screen
+          await loadNotes();
           if (!$("#md").innerHTML && P !== "book" && P !== "acct" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) render();
         });
         return true;
+      }
+      /* ---------- updates for the customer (#3): payment confirmed / rejected, reschedule answered, receipt ready ---------- */
+      let NT = [], NT_SEEN = null; // this customer's notifications; ids already announced in this tab
+      const unreadN = () => NT.filter((n) => !n.read_at).length;
+      async function loadNotes(first) {
+        try { NT = await (FN.raw || FN).myNotifications(); } catch (e) { return; } // updates are extra: never block the page
+        const unread = NT.filter((n) => !n.read_at);
+        if (first || !NT_SEEN) {
+          NT_SEEN = new Set(NT.map((n) => n.id));
+          if (unread.length) notice(unread.length === 1 ? unread[0].message : `You have ${unread.length} new updates about your bookings.`);
+          return;
+        }
+        const fresh = unread.filter((n) => !NT_SEEN.has(n.id));
+        fresh.forEach((n) => NT_SEEN.add(n.id));
+        if (fresh.length) notice(fresh.length === 1 ? fresh[0].message : `You have ${fresh.length} new updates about your bookings.`);
+        const b = $("#bellN"); // keep the bell count right even on pages that don't redraw in the background
+        if (b) { b.textContent = unreadN() || ""; b.hidden = !unreadN(); }
+      }
+      // A small pop-up note in the corner when something new happens.
+      function notice(msg) {
+        let el = document.getElementById("ntc");
+        if (!el) { el = document.createElement("div"); el.id = "ntc"; el.className = "ntc noprint"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+        el.innerHTML = `<span>🔔 ${esc(msg)}</span><span class="ntc-b"><button class="btn sm" onclick="this.closest('.ntc').remove();openNotes()">View</button><button class="btn sm w" aria-label="Dismiss" onclick="this.closest('.ntc').remove()">✕</button></span>`;
+        clearTimeout(notice.t);
+        notice.t = setTimeout(() => el.remove(), 12000);
+      }
+      async function openNotes() {
+        const when = (iso) => new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        const list = NT.length
+          ? NT.map((n) => { const a = DB.appts.find((x) => x.id === n.appointment_id); return `<div class="note ${n.read_at ? "" : "new"}"><small class="mute">${n.created_at ? when(n.created_at) : ""}${n.read_at ? "" : " · New"}</small><br>${esc(n.message)}${a ? `<br><a class="pr" style="cursor:pointer;font-size:.85rem" onclick="modal();apptDetails('${a.id}')">View booking ${esc(a.code)}</a>` : ""}</div>`; }).join("")
+          : "<p class=\"mute\">No updates yet. You'll see a message here when the salon confirms your payment or answers a reschedule request.</p>";
+        modal(`<h3>Updates</h3><div class="notes">${list}</div>${MF('<button class="btn" onclick="modal()">Close</button>')}`);
+        if (unreadN()) {
+          const now = new Date().toISOString();
+          NT.forEach((n) => { if (!n.read_at) n.read_at = now; });
+          render(); // clears the bell count; the pop-up stays open
+          try { await (FN.raw || FN).markNotificationsRead(); } catch (e) { /* read here; the server catches up next time */ }
+        }
       }
       async function boot() {
         // Public pages (home, gallery, about) work with the bundled defaults, so show them right away and
@@ -1166,7 +1206,9 @@ ${f("a_st", "House / unit no. and street", v.street, 'autocomplete="address-line
       const askLogout = () => ask("Log out?", "<p>You'll need to log in again to book or to see your appointments.</p>", "Log out", "modal();doLogout()", "Stay logged in");
       async function doLogout() {
         if (unwatch) unwatch(); unwatch = null;
-        await FN.signOut(); U = null; DB.appts = []; B = { step: 0 }; clearDraft(); go("home");
+        await FN.signOut(); U = null; DB.appts = []; B = { step: 0 }; clearDraft();
+        NT = []; NT_SEEN = null; const nt = document.getElementById("ntc"); if (nt) nt.remove();
+        go("home");
       }
 
       /* ---------- deposit: TEST mode records it instantly; LIVE mode goes to PayMongo and waits for the webhook ---------- */

@@ -67,6 +67,11 @@ export const myAppointmentHistory = async (id) =>
 /** Withdraw a reschedule request that the salon has not answered yet. */
 export const cancelMyReschedule = async (requestId) => must(await sb.rpc("cancel_my_reschedule", { p_req: requestId }));
 
+/** The signed-in customer's latest updates (payment confirmed / rejected, reschedule answered, receipt ready). */
+export const myNotifications = async () =>
+  must(await sb.from("notifications").select("*").order("created_at", { ascending: false }).limit(30));
+export const markNotificationsRead = async () => must(await sb.rpc("mark_my_notifications_read"));
+
 export const cancelMyBooking = async (id) => must(await sb.rpc("cancel_my_booking", { p_appt: id }));
 
 /** After returning from checkout: wait for the DATABASE (webhook-driven) to say 'confirmed'. */

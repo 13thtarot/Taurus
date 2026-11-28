@@ -11,8 +11,8 @@ export function watch(name, tables, onChange, filter = {}) {
   return () => sb.removeChannel(ch);
 }
 
-export const watchStaffBoard = (cb) => watch("staff-board", ["appointments", "payments", "walkin_queue", "sales"], cb);
-export const watchOwnerBoard = (cb) => watch("owner-board", ["appointments", "payments", "sales", "refunds"], cb);
+export const watchStaffBoard = (cb) => watch("staff-board", ["appointments", "payments", "walkin_queue", "sales", "reschedule_requests"], cb);
+export const watchOwnerBoard = (cb) => watch("owner-board", ["appointments", "payments", "sales", "refunds", "reschedule_requests"], cb);
 export const watchMyBookings = (uid, cb) =>
   watch("my-" + uid, ["appointments", "payments", "notifications", "sales"], cb,
         { appointments: `customer_id=eq.${uid}`, notifications: `user_id=eq.${uid}` });
